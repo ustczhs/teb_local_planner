@@ -32,7 +32,7 @@
  *  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
  *  ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  *  POSSIBILITY OF SUCH DAMAGE.
- * 
+ *
  * Notes:
  * The following class is derived from a class defined by the
  * g2o-framework. g2o is licensed under the terms of the BSD License.
@@ -44,105 +44,91 @@
 #ifndef VERTEX_TIMEDIFF_H
 #define VERTEX_TIMEDIFF_H
 
-
 #include "g2o/config.h"
 #include "g2o/core/base_vertex.h"
 #include "g2o/core/hyper_graph_action.h"
 
-#include "ros/console.h"
-
 #include <Eigen/Core>
 
-namespace teb_local_planner
-{
+namespace teb_local_planner {
 
 /**
-  * @class VertexTimeDiff
-  * @brief This class stores and wraps a time difference \f$ \Delta T \f$ into a vertex that can be optimized via g2o
-  * @see VertexPointXY
-  * @see VertexOrientation
-  */
-class VertexTimeDiff : public g2o::BaseVertex<1, double>
-{
+ * @class VertexTimeDiff
+ * @brief This class stores and wraps a time difference \f$ \Delta T \f$ into a
+ * vertex that can be optimized via g2o
+ * @see VertexPointXY
+ * @see VertexOrientation
+ */
+class VertexTimeDiff : public g2o::BaseVertex<1, double> {
 public:
-
   /**
-    * @brief Default constructor
-    * @param fixed if \c true, this vertex is considered fixed during optimization [default: \c false]
-    */  
-  VertexTimeDiff(bool fixed = false)
-  {
+   * @brief Default constructor
+   * @param fixed if \c true, this vertex is considered fixed during
+   * optimization [default: \c false]
+   */
+  VertexTimeDiff(bool fixed = false) {
     setToOriginImpl();
     setFixed(fixed);
   }
-  
+
   /**
-    * @brief Construct the TimeDiff vertex with a value
-    * @param dt time difference value of the vertex
-    * @param fixed if \c true, this vertex is considered fixed during optimization [default: \c false]
-    */  
-  VertexTimeDiff(double dt, bool fixed = false)
-  {
+   * @brief Construct the TimeDiff vertex with a value
+   * @param dt time difference value of the vertex
+   * @param fixed if \c true, this vertex is considered fixed during
+   * optimization [default: \c false]
+   */
+  VertexTimeDiff(double dt, bool fixed = false) {
     _estimate = dt;
     setFixed(fixed);
   }
 
   /**
-    * @brief Destructs the VertexTimeDiff
-    */ 
-  ~VertexTimeDiff()
-  {}
+   * @brief Destructs the VertexTimeDiff
+   */
+  ~VertexTimeDiff() {}
 
   /**
-    * @brief Access the timediff value of the vertex
-    * @see estimate
-    * @return reference to dt
-    */ 
-  double& dt() {return _estimate;}
-  
-  /**
-    * @brief Access the timediff value of the vertex (read-only)
-    * @see estimate
-    * @return const reference to dt
-    */ 
-  const double& dt() const {return _estimate;}
-  
-  /**
-    * @brief Set the underlying TimeDiff estimate \f$ \Delta T \f$ to default.
-    */ 
-  virtual void setToOriginImpl()
-  {
-    _estimate = 0.1;
-  }
+   * @brief Access the timediff value of the vertex
+   * @see estimate
+   * @return reference to dt
+   */
+  double &dt() { return _estimate; }
 
   /**
-    * @brief Define the update increment \f$ \Delta T_{k+1} = \Delta T_k + update \f$.
-    * A simple addition implements what we want.
-    * @param update increment that should be added to the previous esimate
-    */ 
-  virtual void oplusImpl(const double* update)
-  {
-      _estimate += *update;
-  }
+   * @brief Access the timediff value of the vertex (read-only)
+   * @see estimate
+   * @return const reference to dt
+   */
+  const double &dt() const { return _estimate; }
 
   /**
-    * @brief Read an estimate of \f$ \Delta T \f$ from an input stream
-    * @param is input stream
-    * @return always \c true
-    */ 
-  virtual bool read(std::istream& is)
-  {
+   * @brief Set the underlying TimeDiff estimate \f$ \Delta T \f$ to default.
+   */
+  virtual void setToOriginImpl() { _estimate = 0.1; }
+
+  /**
+   * @brief Define the update increment \f$ \Delta T_{k+1} = \Delta T_k + update
+   * \f$. A simple addition implements what we want.
+   * @param update increment that should be added to the previous esimate
+   */
+  virtual void oplusImpl(const double *update) { _estimate += *update; }
+
+  /**
+   * @brief Read an estimate of \f$ \Delta T \f$ from an input stream
+   * @param is input stream
+   * @return always \c true
+   */
+  virtual bool read(std::istream &is) {
     is >> _estimate;
     return true;
   }
 
   /**
-    * @brief Write the estimate \f$ \Delta T \f$ to an output stream
-    * @param os output stream
-    * @return \c true if the export was successful, otherwise \c false
-    */ 
-  virtual bool write(std::ostream& os) const
-  {
+   * @brief Write the estimate \f$ \Delta T \f$ to an output stream
+   * @param os output stream
+   * @return \c true if the export was successful, otherwise \c false
+   */
+  virtual bool write(std::ostream &os) const {
     os << estimate();
     return os.good();
   }
@@ -150,6 +136,6 @@ public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
 
-}
+} // namespace teb_local_planner
 
 #endif
