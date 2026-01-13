@@ -1,9 +1,6 @@
 # teb_local_planner
 teb local planner without ros, teb 局部路径规划算法，非ROS版本移植，可以自行在项目中当作一个库进行调用
 
-原始的代码和相关论文请参考原始的teb工程
-https://github.com/rst-tu-dortmund/teb_local_planner
-
 # 调用流程
 
 ## 编译依赖项
@@ -43,3 +40,9 @@ https://github.com/rst-tu-dortmund/teb_local_planner
 `planner->getFullTrajectory(path);`
 
 
+todo:
+1. config.yaml中按需增加配置项
+2. 确定走廊约束是否生效
+3. 仿真效果目前没有达到预期，需要检查原因
+4. 增加接口层功能调用
+5. 其他按文档进行开发和测试

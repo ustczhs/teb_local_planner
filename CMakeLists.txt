@@ -9,8 +9,10 @@ find_package(SUITESPARSE REQUIRED)
 find_package(G2O REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(fmt REQUIRED)
+find_package(yaml-cpp REQUIRED)
 
 include_directories(
+        inc
         /usr/include/eigen3
         ${SUITESPARSE_INCLUDE_DIRS}
         ${G2O_INCLUDE_DIR}
@@ -23,9 +25,13 @@ add_library(lib_teb
         src/visualization.cpp
         src/optimal_planner.cpp
         src/timed_elastic_band.cpp
+        src/frenet_reference.cpp
+        src/config_loader.cpp
 )
 
 add_executable(teb main.cpp)
+
+add_executable(planner_test planner_test.cpp)
 
 target_link_libraries(
         teb
@@ -35,4 +41,15 @@ target_link_libraries(
         -lboost_system -lboost_thread -lboost_graph
         ${OpenCV_LIBS}
         fmt::fmt
+)
+
+target_link_libraries(
+        planner_test
+        lib_teb
+        ${SUITESPARSE_LIBRARIES}
+        ${G2O_LIBRARIES}
+        -lboost_system -lboost_thread -lboost_graph
+        ${OpenCV_LIBS}
+        fmt::fmt
+        yaml-cpp
 )
