@@ -93,6 +93,7 @@ sensor:
   cluster_distance_threshold: 0.1  # 聚类距离阈值 (m)
   cluster_min_points: 3          # 聚类最小点数
   downsample_factor: 2           # 降采样因子
+  local_map_size: 4.0          # 局部地图大小 (m)
 
 # ==============================================================================
 # 测试场景配置

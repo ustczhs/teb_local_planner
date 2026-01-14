@@ -425,6 +425,7 @@ public:
     int cluster_min_points; //!< Minimum number of points to form a cluster
     int downsample_factor;  //!< Downsampling factor for laser points (1 = no
                             //!< downsampling)
+    double local_map_size;  //!< Local map size for filtering laser points (meters)
   } sensor;                 //!< Sensor related parameters
 
   /**
@@ -585,6 +586,7 @@ public:
     sensor.cluster_distance_threshold = 0.1;
     sensor.cluster_min_points = 3;
     sensor.downsample_factor = 2;
+    sensor.local_map_size = 4.0;
   }
 
   /**

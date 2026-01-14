@@ -53,6 +53,15 @@ public:
   // 清理过期记忆
   void cleanExpiredMemory(double current_time, double memory_duration);
 
+  // 清理无效记忆障碍物（FOV内、超出距离、超时）
+  void cleanInvalidMemory(double current_time, double memory_duration,
+                          double local_map_size, double fov_min_angle,
+                          double fov_max_angle, const PoseData &current_pose);
+
+  // 删除当前FOV内的记忆障碍物（避免重复）
+  void removeMemoryObstaclesInCurrentFOV(double fov_min_angle, double fov_max_angle,
+                                         const PoseData &current_pose);
+
   // 获取障碍物
   ObstContainer getFOVObstacles() const;
   ObstContainer getMemoryObstacles() const;
@@ -79,6 +88,10 @@ private:
   // 降采样
   std::vector<Eigen::Vector2d>
   downsamplePoints(const std::vector<Eigen::Vector2d> &points, int factor);
+
+  // 局部地图大小过滤
+  std::vector<Eigen::Vector2d> filterByLocalMapSize(
+      const std::vector<Eigen::Vector2d> &points, double local_map_size);
 
   // 激光雷达数据转换
   std::vector<Eigen::Vector2d>
