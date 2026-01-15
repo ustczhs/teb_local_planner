@@ -65,6 +65,9 @@ SensorProcessor::convertLaserToPoints(const LaserScanData &scan_data) {
   double angle_increment = scan_data.angle_increment;
   double angle_min = scan_data.angle_min;
 
+  // turtlebot4激光雷达相对于base_link顺时针旋转90度
+  const double LASER_INSTALL_ANGLE = M_PI / 2.0; // 90度
+
   for (size_t i = 0; i < scan_data.ranges.size(); ++i) {
     float range = scan_data.ranges[i];
 
@@ -74,8 +77,8 @@ SensorProcessor::convertLaserToPoints(const LaserScanData &scan_data) {
       continue;
     }
 
-    // 计算角度
-    double angle = angle_min + i * angle_increment;
+    // 计算角度，加上激光雷达安装角度偏移
+    double angle = angle_min + i * angle_increment + LASER_INSTALL_ANGLE;
 
     // 转换为笛卡尔坐标（基座坐标系）
     double x = range * std::cos(angle);
@@ -261,18 +264,54 @@ void SensorProcessor::laserCallback(const LaserScanData &scan_data,
   auto duration = now.time_since_epoch();
   current_time_ = std::chrono::duration<double>(duration).count();
 
+  // 0. 处理上一帧 FOV 内的点：哪些现在滑出去了，就直接加到 memory（作为 PointObstacle）
+  for (const auto& prev_p_world : previous_fov_points_world_) {
+    // 转到当前 base_link 坐标系
+    auto prev_p_base_vec = transformPointsToBase({prev_p_world}, current_pose);
+    Eigen::Vector2d prev_p_base = prev_p_base_vec.front();
+
+    double distance = prev_p_base.norm();
+    if (distance > config_.sensor.local_map_size) {
+      continue;  // 超出局部地图大小，不记忆
+    }
+
+    double angle = std::atan2(prev_p_base.y(), prev_p_base.x());
+    // 稳定归一化角度到 [-π, π]
+    angle = std::fmod(angle + 3 * M_PI, 2 * M_PI) - M_PI;
+
+    if (angle < config_.sensor.fov_min_angle || angle > config_.sensor.fov_max_angle) {
+      // 这个点滑出去了，直接创建 PointObstacle 加到 memory
+      ObstaclePtr point_obs(new PointObstacle(prev_p_world.x(), prev_p_world.y()));
+
+      // 存的角度用当前帧的角度（cleanInvalidMemory 会用到）
+      double stored_angle = angle;
+
+      memory_.addMemoryObstacle(point_obs, stored_angle, current_time_);
+
+      // 调试日志（强烈推荐加）
+      // std::cout << "[SLIDE OUT] Added point to memory: world ("
+      //           << prev_p_world.x() << ", " << prev_p_world.y()
+      //           << "), current angle " << (angle * 180.0 / M_PI) << "°" << std::endl;
+    }
+  }
+
   // 1. 转换为点云（基座坐标系）
   auto raw_points = convertLaserToPoints(scan_data);
+  debug_raw_points_ = transformPointsToWorld(raw_points, current_pose);
 
   // 2. 降采样
   auto points = downsamplePoints(raw_points, config_.sensor.downsample_factor);
+  debug_downsampled_points_ = transformPointsToWorld(points, current_pose);
 
   // 3. 局部地图大小过滤（基座坐标系）
   auto local_points = filterByLocalMapSize(points, config_.sensor.local_map_size);
+  debug_local_filtered_points_ = transformPointsToWorld(local_points, current_pose);
 
   // 4. FOV分离（基座坐标系）
   auto [fov_points_base, non_fov_points_base] = separateFOVPoints(
       local_points, config_.sensor.fov_min_angle, config_.sensor.fov_max_angle);
+  debug_fov_points_ = transformPointsToWorld(fov_points_base, current_pose);
+  debug_non_fov_points_ = transformPointsToWorld(non_fov_points_base, current_pose);
 
   // 5. FOV内聚类（在base_link坐标系下进行）
   auto fov_clusters_base = euclideanClustering(
@@ -280,46 +319,54 @@ void SensorProcessor::laserCallback(const LaserScanData &scan_data,
       config_.sensor.cluster_min_points);
   auto fov_obstacles_base = clustersToObstacles(fov_clusters_base);
 
-  // 6. FOV外聚类（也在base_link坐标系下进行，保持一致性）
-  auto non_fov_clusters_base = euclideanClustering(
-      non_fov_points_base, config_.sensor.cluster_distance_threshold,
-      config_.sensor.cluster_min_points);
-
-  for (const auto &cluster : non_fov_clusters_base) {
-    if (cluster.empty())
-      continue;
-
-    // 计算簇的质心（base_link坐标系）
-    Eigen::Vector2d cluster_centroid(0, 0);
-    for (const auto &point : cluster) {
-      cluster_centroid += point;
-    }
-    cluster_centroid /= cluster.size();
-
-    // 计算角度（base_link坐标系）
-    double cluster_angle_base = std::atan2(cluster_centroid.y(), cluster_centroid.x());
-
-    // 将簇点转换为世界坐标系创建障碍物
-    auto cluster_world_points = transformPointsToWorld(cluster, current_pose);
-    std::vector<std::vector<Eigen::Vector2d>> single_cluster_world = {cluster_world_points};
-    auto obstacle_world = clustersToObstacles(single_cluster_world).front();
-
-    memory_.addMemoryObstacle(obstacle_world, cluster_angle_base, current_time_);
+  // 收集FOV内聚类点云（转换为世界坐标系用于调试）
+  debug_fov_clusters_.clear();
+  for (const auto& cluster : fov_clusters_base) {
+    auto cluster_world = transformPointsToWorld(cluster, current_pose);
+    debug_fov_clusters_.insert(debug_fov_clusters_.end(),
+                               cluster_world.begin(), cluster_world.end());
   }
 
-  // 7. 删除当前FOV内的记忆障碍物（避免重复）
+  // 6. 删除当前FOV内的记忆障碍物（避免重复）
   memory_.removeMemoryObstaclesInCurrentFOV(config_.sensor.fov_min_angle,
                                             config_.sensor.fov_max_angle,
                                             current_pose);
 
-  // 8. 清理无效记忆障碍物（超时、超距、进入FOV）
+  // 7. 清理无效记忆障碍物（超时、超距、进入FOV）
   memory_.cleanInvalidMemory(current_time_, config_.sensor.obstacle_memory_time,
                              config_.sensor.local_map_size,
                              config_.sensor.fov_min_angle,
                              config_.sensor.fov_max_angle, current_pose);
 
-  // 9. 更新FOV障碍物（直接替换）
+  // 8. 更新FOV障碍物（直接替换）
   memory_.updateFOVObstacles(fov_obstacles_base);
+
+  // 9. 保存当前FOV内点用于下一帧（转换为世界坐标系）
+  // 清空旧的
+  previous_fov_points_world_.clear();
+
+  // 把当前 FOV 内点转到世界坐标保存
+  for (const auto& p_base : fov_points_base) {  // fov_points_base 是 base_link 坐标系下的点
+    auto p_world_vec = transformPointsToWorld({p_base}, current_pose);
+    previous_fov_points_world_.push_back(p_world_vec.front());
+  }
+
+  // 调试日志（强烈推荐加）
+  // std::cout << "[DEBUG] Saved " << previous_fov_points_world_.size()
+  //           << " previous FOV points (world) for next frame" << std::endl;
+
+  // 10. 更新记忆障碍物调试数据
+  debug_memory_obstacles_.clear();
+  auto memory_obstacles = memory_.getMemoryObstacles();
+  for (const auto& obs : memory_obstacles) {
+    if (auto circular_obs = boost::dynamic_pointer_cast<CircularObstacle>(obs)) {
+      Eigen::Vector2d pos(circular_obs->position().x(), circular_obs->position().y());
+      debug_memory_obstacles_.push_back(pos);
+    } else if (auto point_obs = boost::dynamic_pointer_cast<PointObstacle>(obs)) {
+      Eigen::Vector2d pos(point_obs->position().x(), point_obs->position().y());
+      debug_memory_obstacles_.push_back(pos);
+    }
+  }
 }
 
 // 获取当前所有障碍物（用于规划）
@@ -340,6 +387,68 @@ SensorProcessor::getObstaclesForPlanning(const PoseData &current_pose) {
                        memory_obs_base.end());
 
   return all_obstacles;
+}
+
+// 获取当前所有障碍物的点云（map坐标系，用于可视化）
+std::vector<Eigen::Vector2d>
+SensorProcessor::getObstaclesPointsForPlanning(const PoseData &current_pose) {
+
+  std::vector<Eigen::Vector2d> obstacle_points;
+
+  // FOV内原始点云（与_debug_fov_points一致）
+  obstacle_points.insert(obstacle_points.end(),
+                         debug_fov_points_.begin(),
+                         debug_fov_points_.end());
+
+  // FOV外记忆障碍物点云
+  obstacle_points.insert(obstacle_points.end(),
+                         debug_memory_obstacles_.begin(),
+                         debug_memory_obstacles_.end());
+
+  return obstacle_points;
+}
+
+// 障碍物坐标变换：基座坐标系 -> 世界坐标系
+ObstContainer
+SensorProcessor::transformObstaclesToWorld(const ObstContainer &obstacles_base,
+                                           const PoseData &current_pose) {
+
+  ObstContainer obstacles_world;
+
+  double robot_x = current_pose.position.x;
+  double robot_y = current_pose.position.y;
+  double robot_yaw =
+      quaternionToYaw(current_pose.orientation.x, current_pose.orientation.y,
+                      current_pose.orientation.z, current_pose.orientation.w);
+
+  Eigen::Rotation2Dd rotation(robot_yaw);
+  Eigen::Vector2d translation(robot_x, robot_y);
+
+  for (const auto &obs : obstacles_base) {
+    if (auto circular_obs =
+            boost::dynamic_pointer_cast<CircularObstacle>(obs)) {
+      // 变换圆形障碍物
+      Eigen::Vector2d centroid_base(circular_obs->position().x(),
+                                    circular_obs->position().y());
+      Eigen::Vector2d centroid_world = rotation * centroid_base + translation;
+
+      ObstaclePtr new_obs(new CircularObstacle(
+          centroid_world.x(), centroid_world.y(), circular_obs->radius()));
+      obstacles_world.push_back(new_obs);
+    } else if (auto point_obs =
+                   boost::dynamic_pointer_cast<PointObstacle>(obs)) {
+      // 变换点障碍物
+      Eigen::Vector2d pos_base(point_obs->position().x(),
+                               point_obs->position().y());
+      Eigen::Vector2d pos_world = rotation * pos_base + translation;
+
+      ObstaclePtr new_obs(new PointObstacle(pos_world.x(), pos_world.y()));
+      obstacles_world.push_back(new_obs);
+    }
+    // 其他类型的障碍物可以类似处理
+  }
+
+  return obstacles_world;
 }
 
 // 障碍物坐标变换：世界坐标系 -> 基座坐标系
@@ -430,53 +539,87 @@ void ObstacleMemory::cleanInvalidMemory(double current_time,
   Eigen::Rotation2Dd rotation(-robot_yaw);
   Eigen::Vector2d translation(-robot_x, -robot_y);
 
+  // std::cout << "[DEBUG] cleanInvalidMemory: checking " << memory_list_.size()
+  //           << " memory obstacles, current_time=" << current_time
+  //           << ", memory_duration=" << memory_duration
+  //           << ", local_map_size=" << local_map_size
+  //           << ", fov=[" << (fov_min_angle * 180.0 / M_PI) << ", "
+  //           << (fov_max_angle * 180.0 / M_PI) << "] degrees" << std::endl;
+
   auto it = std::remove_if(
       memory_list_.begin(), memory_list_.end(),
       [&](const MemoryObstacle &mem_obs) {
+        double age = current_time - mem_obs.timestamp;
+        // std::cout << "[DEBUG] Checking memory obstacle: timestamp=" << mem_obs.timestamp
+        //           << ", age=" << age << "s, stored_angle=" << (mem_obs.angle * 180.0 / M_PI) << "°" << std::endl;
+
         // 1. 检查是否超时
-        if ((current_time - mem_obs.timestamp) > memory_duration) {
+        if (age > memory_duration) {
+          // std::cout << "[DEBUG] -> REMOVING: timeout (age=" << age << " > " << memory_duration << ")" << std::endl;
           return true;
         }
 
         // 2. 将障碍物转到当前base_link坐标系，检查距离和FOV
         Eigen::Vector2d pos_base;
         bool valid_obstacle = false;
+        std::string obstacle_type;
 
         if (auto circular_obs = boost::dynamic_pointer_cast<CircularObstacle>(mem_obs.obstacle)) {
           Eigen::Vector2d centroid_world(circular_obs->position().x(),
                                          circular_obs->position().y());
           pos_base = rotation * (centroid_world + translation);
           valid_obstacle = true;
+          obstacle_type = "Circular";
+          // std::cout << "[DEBUG] -> Circular obstacle at world (" << centroid_world.x() << ", " << centroid_world.y()
+          //           << ") -> base (" << pos_base.x() << ", " << pos_base.y() << ")" << std::endl;
         } else if (auto point_obs = boost::dynamic_pointer_cast<PointObstacle>(mem_obs.obstacle)) {
           Eigen::Vector2d pos_world(point_obs->position().x(),
                                     point_obs->position().y());
           pos_base = rotation * (pos_world + translation);
           valid_obstacle = true;
+          obstacle_type = "Point";
+          // std::cout << "[DEBUG] -> Point obstacle at world (" << pos_world.x() << ", " << pos_world.y()
+          //           << ") -> base (" << pos_base.x() << ", " << pos_base.y() << ")" << std::endl;
+        } else {
+          // std::cout << "[DEBUG] -> REMOVING: unknown obstacle type" << std::endl;
+          return true; // 未知类型，删除
         }
 
         if (valid_obstacle) {
           double distance = pos_base.norm();
-
-          // 如果超出local_map_size范围，删除
-          if (distance > local_map_size) {
-            return true;
-          }
-
-          // 重新计算当前角度（因为机器人可能移动/转动）
           double current_angle = std::atan2(pos_base.y(), pos_base.x());
+
+          // 归一化角度到 [-pi, pi]
           while (current_angle > M_PI) current_angle -= 2 * M_PI;
           while (current_angle < -M_PI) current_angle += 2 * M_PI;
 
-          // 如果当前角度在FOV内，删除（用最新扫描数据覆盖）
-          if (current_angle >= fov_min_angle && current_angle <= fov_max_angle) {
+          // std::cout << "[DEBUG] -> " << obstacle_type << " obstacle: distance=" << distance
+          //           << "m, current_angle=" << (current_angle * 180.0 / M_PI) << "°" << std::endl;
+
+          // 如果超出local_map_size范围，删除
+          if (distance > local_map_size) {
+            // std::cout << "[DEBUG] -> REMOVING: out of range (" << distance << " > " << local_map_size << ")" << std::endl;
             return true;
           }
+
+          // 如果当前角度在FOV内，删除（用最新扫描数据覆盖）
+          if (current_angle >= fov_min_angle && current_angle <= fov_max_angle) {
+            // std::cout << "[DEBUG] -> REMOVING: in current FOV (" << (current_angle * 180.0 / M_PI)
+            //           << "° in [" << (fov_min_angle * 180.0 / M_PI) << ", " << (fov_max_angle * 180.0 / M_PI) << "])" << std::endl;
+            return true;
+          }
+
+          // std::cout << "[DEBUG] -> KEEPING: valid memory obstacle" << std::endl;
         }
 
         return false; // 保留
       });
 
+  int removed_count = std::distance(it, memory_list_.end());
   memory_list_.erase(it, memory_list_.end());
+
+  // std::cout << "[DEBUG] cleanInvalidMemory: removed " << removed_count
+  //           << " obstacles, " << memory_list_.size() << " remaining" << std::endl;
 }
 
 void ObstacleMemory::removeMemoryObstaclesInCurrentFOV(double fov_min_angle, double fov_max_angle,
@@ -536,6 +679,39 @@ ObstContainer ObstacleMemory::getMemoryObstacles() const {
   }
 
   return obstacles;
+}
+
+// 调试接口实现
+std::vector<Eigen::Vector2d> SensorProcessor::getDebugRawPoints() const {
+  return debug_raw_points_;
+}
+
+std::vector<Eigen::Vector2d> SensorProcessor::getDebugDownsampledPoints() const {
+  return debug_downsampled_points_;
+}
+
+std::vector<Eigen::Vector2d> SensorProcessor::getDebugLocalFilteredPoints() const {
+  return debug_local_filtered_points_;
+}
+
+std::vector<Eigen::Vector2d> SensorProcessor::getDebugFovPoints() const {
+  return debug_fov_points_;
+}
+
+std::vector<Eigen::Vector2d> SensorProcessor::getDebugNonFovPoints() const {
+  return debug_non_fov_points_;
+}
+
+std::vector<Eigen::Vector2d> SensorProcessor::getDebugFovClusters() const {
+  return debug_fov_clusters_;
+}
+
+std::vector<Eigen::Vector2d> SensorProcessor::getDebugNonFovClusters() const {
+  return debug_non_fov_clusters_;
+}
+
+std::vector<Eigen::Vector2d> SensorProcessor::getDebugMemoryObstacles() const {
+  return debug_memory_obstacles_;
 }
 
 } // namespace teb_local_planner

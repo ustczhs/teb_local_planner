@@ -7,6 +7,7 @@
 #include "nav_msgs/msg/path.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
+#include "sensor_msgs/msg/point_cloud2.hpp"
 #include "tf2/LinearMath/Matrix3x3.h"
 #include "tf2/LinearMath/Quaternion.h"
 #include "visualization_msgs/msg/marker_array.hpp"
@@ -72,6 +73,28 @@ public:
     obstacle_pub_ =
         this->create_publisher<visualization_msgs::msg::MarkerArray>("/obstacles_marker", 10);
 
+    // Create debug point cloud publishers
+    debug_raw_points_pub_ =
+        this->create_publisher<sensor_msgs::msg::PointCloud2>("/debug/raw_points", 10);
+    debug_downsampled_points_pub_ =
+        this->create_publisher<sensor_msgs::msg::PointCloud2>("/debug/downsampled_points", 10);
+    debug_local_filtered_points_pub_ =
+        this->create_publisher<sensor_msgs::msg::PointCloud2>("/debug/local_filtered_points", 10);
+    debug_fov_points_pub_ =
+        this->create_publisher<sensor_msgs::msg::PointCloud2>("/debug/fov_points", 10);
+    debug_non_fov_points_pub_ =
+        this->create_publisher<sensor_msgs::msg::PointCloud2>("/debug/non_fov_points", 10);
+    debug_fov_clusters_pub_ =
+        this->create_publisher<sensor_msgs::msg::PointCloud2>("/debug/fov_clusters", 10);
+    debug_non_fov_clusters_pub_ =
+        this->create_publisher<sensor_msgs::msg::PointCloud2>("/debug/non_fov_clusters", 10);
+    debug_memory_obstacles_pub_ =
+        this->create_publisher<sensor_msgs::msg::PointCloud2>("/debug/memory_obstacles", 10);
+    obstacles_points_pub_ =
+        this->create_publisher<sensor_msgs::msg::PointCloud2>("/obstacles_points", 10);
+    obstacles_clusters_marker_pub_ =
+        this->create_publisher<visualization_msgs::msg::MarkerArray>("/obstacles_clusters_marker", 10);
+
     // Create planning timer
     auto planning_period =
         std::chrono::duration<double>(1.0 / planning_frequency_);
@@ -97,6 +120,16 @@ private:
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
   rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr obstacle_pub_;
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr debug_raw_points_pub_;
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr debug_downsampled_points_pub_;
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr debug_local_filtered_points_pub_;
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr debug_fov_points_pub_;
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr debug_non_fov_points_pub_;
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr debug_fov_clusters_pub_;
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr debug_non_fov_clusters_pub_;
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr debug_memory_obstacles_pub_;
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr obstacles_points_pub_;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr obstacles_clusters_marker_pub_;
   rclcpp::TimerBase::SharedPtr planning_timer_;
 
   // State variables
@@ -198,8 +231,8 @@ private:
 
     ObstContainer obstacles =
         sensor_processor_->getObstaclesForPlanning(current_pose_data);
-    RCLCPP_INFO(this->get_logger(), "Obstacles for planning: %zu",
-                obstacles.size());
+    // RCLCPP_INFO(this->get_logger(), "Obstacles for planning: %zu",
+    //             obstacles.size());
 
     // Helper function to transform point from base_link to map
     auto transformPointToMap = [&](const Eigen::Vector2d& point_base) -> Eigen::Vector2d {
@@ -294,15 +327,33 @@ private:
     }
     obstacle_pub_->publish(marker_array);
 
+    // Publish debug point clouds
+    publishDebugPointCloud(sensor_processor_->getDebugRawPoints(), debug_raw_points_pub_);
+    publishDebugPointCloud(sensor_processor_->getDebugDownsampledPoints(), debug_downsampled_points_pub_);
+    publishDebugPointCloud(sensor_processor_->getDebugLocalFilteredPoints(), debug_local_filtered_points_pub_);
+    publishDebugPointCloud(sensor_processor_->getDebugFovPoints(), debug_fov_points_pub_);
+    publishDebugPointCloud(sensor_processor_->getDebugNonFovPoints(), debug_non_fov_points_pub_);
+    publishDebugPointCloud(sensor_processor_->getDebugFovClusters(), debug_fov_clusters_pub_);
+    publishDebugPointCloud(sensor_processor_->getDebugNonFovClusters(), debug_non_fov_clusters_pub_);
+    publishDebugPointCloud(sensor_processor_->getDebugMemoryObstacles(), debug_memory_obstacles_pub_);
+
+    // Publish obstacles points and clusters
+    auto obstacle_points = sensor_processor_->getObstaclesPointsForPlanning(current_pose_data);
+    publishDebugPointCloud(obstacle_points, obstacles_points_pub_);
+
+    // Cluster obstacles and publish markers
+    auto clusters = clusterObstaclePoints(obstacle_points);
+    publishObstacleClusters(clusters);
+
     // Update planner obstacles
     planner_->setObstVector(&obstacles);
 
     try {
       // Plan trajectory
-      RCLCPP_INFO(this->get_logger(), "Planning from (%.2f, %.2f, %.2f) to "
-                                      "(%.2f, %.2f, %.2f)",
-                  current_pose_.x(), current_pose_.y(), current_pose_.theta(),
-                  goal_pose.x(), goal_pose.y(), goal_pose.theta());
+      // RCLCPP_INFO(this->get_logger(), "Planning from (%.2f, %.2f, %.2f) to "
+      //                                 "(%.2f, %.2f, %.2f)",
+      //             current_pose_.x(), current_pose_.y(), current_pose_.theta(),
+      //             goal_pose.x(), goal_pose.y(), goal_pose.theta());
       planner_->plan(current_pose_, goal_pose);
 
       // Get planned trajectory
@@ -372,6 +423,142 @@ private:
       cmd_vel.angular.z = 0.0;
       cmd_vel_pub_->publish(cmd_vel);
     }
+  }
+
+  // Helper function to publish debug point cloud
+  void publishDebugPointCloud(const std::vector<Eigen::Vector2d>& points,
+                              rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr publisher) {
+    sensor_msgs::msg::PointCloud2 cloud_msg;
+    cloud_msg.header.stamp = this->now();
+    cloud_msg.header.frame_id = "map";
+
+    cloud_msg.height = 1;
+    cloud_msg.width = points.size();
+    cloud_msg.is_dense = true;
+    cloud_msg.is_bigendian = false;
+
+    // Define fields
+    sensor_msgs::msg::PointField x_field;
+    x_field.name = "x";
+    x_field.offset = 0;
+    x_field.datatype = sensor_msgs::msg::PointField::FLOAT32;
+    x_field.count = 1;
+
+    sensor_msgs::msg::PointField y_field;
+    y_field.name = "y";
+    y_field.offset = 4;
+    y_field.datatype = sensor_msgs::msg::PointField::FLOAT32;
+    y_field.count = 1;
+
+    sensor_msgs::msg::PointField z_field;
+    z_field.name = "z";
+    z_field.offset = 8;
+    z_field.datatype = sensor_msgs::msg::PointField::FLOAT32;
+    z_field.count = 1;
+
+    cloud_msg.fields = {x_field, y_field, z_field};
+    cloud_msg.point_step = 12;  // 3 * 4 bytes
+    cloud_msg.row_step = cloud_msg.point_step * cloud_msg.width;
+
+    // Fill data
+    cloud_msg.data.resize(cloud_msg.row_step * cloud_msg.height);
+    uint8_t* data_ptr = cloud_msg.data.data();
+
+    for (size_t i = 0; i < points.size(); ++i) {
+      float* point_ptr = reinterpret_cast<float*>(data_ptr + i * cloud_msg.point_step);
+      point_ptr[0] = static_cast<float>(points[i].x());  // x
+      point_ptr[1] = static_cast<float>(points[i].y());  // y
+      point_ptr[2] = 0.0f;  // z
+    }
+
+    publisher->publish(cloud_msg);
+  }
+
+  // Helper function to cluster obstacle points
+  std::vector<std::vector<Eigen::Vector2d>> clusterObstaclePoints(const std::vector<Eigen::Vector2d>& points) {
+    // Use simple Euclidean clustering with distance threshold 0.3m and min points 2
+    const double CLUSTER_DISTANCE = 0.3;
+    const int MIN_POINTS = 2;
+
+    std::vector<std::vector<Eigen::Vector2d>> clusters;
+    std::vector<bool> visited(points.size(), false);
+
+    for (size_t i = 0; i < points.size(); ++i) {
+      if (visited[i]) continue;
+
+      std::vector<Eigen::Vector2d> cluster;
+      std::vector<size_t> seeds = {i};
+      visited[i] = true;
+
+      while (!seeds.empty()) {
+        size_t seed_idx = seeds.back();
+        seeds.pop_back();
+        cluster.push_back(points[seed_idx]);
+
+        for (size_t j = 0; j < points.size(); ++j) {
+          if (visited[j]) continue;
+
+          double distance = (points[j] - points[seed_idx]).norm();
+          if (distance <= CLUSTER_DISTANCE) {
+            visited[j] = true;
+            seeds.push_back(j);
+          }
+        }
+      }
+
+      if (static_cast<int>(cluster.size()) >= MIN_POINTS) {
+        clusters.push_back(cluster);
+      }
+    }
+
+    return clusters;
+  }
+
+  // Helper function to publish obstacle clusters as markers
+  void publishObstacleClusters(const std::vector<std::vector<Eigen::Vector2d>>& clusters) {
+    visualization_msgs::msg::MarkerArray marker_array;
+    int marker_id = 0;
+
+    for (const auto& cluster : clusters) {
+      if (cluster.empty()) continue;
+
+      // Calculate cluster centroid
+      Eigen::Vector2d centroid(0, 0);
+      for (const auto& point : cluster) {
+        centroid += point;
+      }
+      centroid /= cluster.size();
+
+      // Calculate cluster radius
+      double max_radius = 0.0;
+      for (const auto& point : cluster) {
+        double dist = (point - centroid).norm();
+        max_radius = std::max(max_radius, dist);
+      }
+
+      // Create cylinder marker for cluster
+      visualization_msgs::msg::Marker marker;
+      marker.header.stamp = this->now();
+      marker.header.frame_id = "map";
+      marker.id = marker_id++;
+      marker.action = visualization_msgs::msg::Marker::ADD;
+      marker.type = visualization_msgs::msg::Marker::CYLINDER;
+      marker.pose.position.x = centroid.x();
+      marker.pose.position.y = centroid.y();
+      marker.pose.position.z = 0.0;
+      marker.pose.orientation.w = 1.0;
+      marker.scale.x = max_radius * 2.0;
+      marker.scale.y = max_radius * 2.0;
+      marker.scale.z = 0.05;
+      marker.color.r = 0.0;
+      marker.color.g = 1.0;
+      marker.color.b = 0.0;
+      marker.color.a = 0.7;
+
+      marker_array.markers.push_back(marker);
+    }
+
+    obstacles_clusters_marker_pub_->publish(marker_array);
   }
 
   // Helper function to find the next goal point along the path

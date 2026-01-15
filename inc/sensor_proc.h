@@ -84,6 +84,19 @@ public:
   // 获取当前所有障碍物（用于规划）
   ObstContainer getObstaclesForPlanning(const PoseData &current_pose);
 
+  // 获取当前所有障碍物的点云（map坐标系，用于可视化）
+  std::vector<Eigen::Vector2d> getObstaclesPointsForPlanning(const PoseData &current_pose);
+
+  // 调试接口：获取各处理步骤的点云数据（统一在map坐标系下）
+  std::vector<Eigen::Vector2d> getDebugRawPoints() const;
+  std::vector<Eigen::Vector2d> getDebugDownsampledPoints() const;
+  std::vector<Eigen::Vector2d> getDebugLocalFilteredPoints() const;
+  std::vector<Eigen::Vector2d> getDebugFovPoints() const;
+  std::vector<Eigen::Vector2d> getDebugNonFovPoints() const;
+  std::vector<Eigen::Vector2d> getDebugFovClusters() const;
+  std::vector<Eigen::Vector2d> getDebugNonFovClusters() const;
+  std::vector<Eigen::Vector2d> getDebugMemoryObstacles() const;
+
 private:
   // 降采样
   std::vector<Eigen::Vector2d>
@@ -121,6 +134,8 @@ private:
       const std::vector<std::vector<Eigen::Vector2d>> &clusters);
 
   // 障碍物坐标变换
+  ObstContainer transformObstaclesToWorld(const ObstContainer &obstacles_base,
+                                          const PoseData &current_pose);
   ObstContainer transformObstaclesToBase(const ObstContainer &obstacles_world,
                                          const PoseData &current_pose);
 
@@ -128,6 +143,19 @@ private:
   const TebConfig &config_;
   ObstacleMemory memory_;
   double current_time_;
+
+  // 跨帧状态跟踪（用于障碍物生命周期管理）
+  std::vector<Eigen::Vector2d> previous_fov_points_world_;  // 上一帧 FOV 内所有有效点（世界坐标）
+
+  // 调试数据存储（统一在map坐标系下）
+  mutable std::vector<Eigen::Vector2d> debug_raw_points_;
+  mutable std::vector<Eigen::Vector2d> debug_downsampled_points_;
+  mutable std::vector<Eigen::Vector2d> debug_local_filtered_points_;
+  mutable std::vector<Eigen::Vector2d> debug_fov_points_;
+  mutable std::vector<Eigen::Vector2d> debug_non_fov_points_;
+  mutable std::vector<Eigen::Vector2d> debug_fov_clusters_;
+  mutable std::vector<Eigen::Vector2d> debug_non_fov_clusters_;
+  mutable std::vector<Eigen::Vector2d> debug_memory_obstacles_;
 };
 
 } // namespace teb_local_planner
