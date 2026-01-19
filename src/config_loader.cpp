@@ -86,7 +86,7 @@ PlannerConfig loadConfig(const std::string &config_file) {
       config.teb_config.optim.weight_obstacle =
           opt_node["weight_obstacle"].as<double>(50);
       config.teb_config.optim.weight_frenet_corridor =
-          opt_node["weight_frenet_corridor"].as<double>(20);
+          opt_node["weight_frenet_corridor"].as<double>(10000);
     }
 
     // Load obstacles configuration
@@ -98,6 +98,9 @@ PlannerConfig loadConfig(const std::string &config_file) {
           obs_node["inflation_dist"].as<double>(0.6);
       config.teb_config.obstacles.obstacle_poses_affected =
           obs_node["obstacle_poses_affected"].as<int>(15);
+           config.teb_config.obstacles.obstacle_square_size =
+          obs_node["obstacle_square_size"].as<double>(5.0);
+            
     }
 
     // Load simulation configuration

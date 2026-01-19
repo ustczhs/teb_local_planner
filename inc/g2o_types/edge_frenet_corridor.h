@@ -6,6 +6,7 @@
 #include "penalties.h"
 #include "vertex_pose.h"
 #include <Eigen/Core>
+#include <limits>
 
 namespace teb_local_planner {
 
@@ -150,6 +151,104 @@ public:
     }
 
     _jacobianOplusXi(0, 2) = 0.0; // dyaw (no direct effect)
+  }
+
+  /**
+   * @brief 判断点是否在走廊边界内
+   * @param point 要判断的点（世界坐标系）
+   * @return true-点在走廊内，false-点在走廊外或无走廊参考
+   */
+  bool isPointInCorridor(const Eigen::Vector2d &point) const {
+    // 如果没有Frenet参考轨迹，返回false
+    if (!frenet_ref_ || frenet_ref_->size() == 0) {
+      return false;
+    }
+    
+    // 找到最近的点
+    Eigen::Vector2d closest_point;
+    double min_dist = std::numeric_limits<double>::max();
+    size_t closest_idx = 0;
+    
+    for (size_t i = 0; i < frenet_ref_->size(); ++i) {
+      Eigen::Vector2d ref_point = frenet_ref_->getPoint(i);
+      double dist = (point - ref_point).norm();
+      if (dist < min_dist) {
+        min_dist = dist;
+        closest_point = ref_point;
+        closest_idx = i;
+      }
+    }
+    
+    // 计算方向向量
+    Eigen::Vector2d direction;
+    if (closest_idx < frenet_ref_->size() - 1) {
+      direction = frenet_ref_->getPoint(closest_idx + 1) - closest_point;
+    } else if (closest_idx > 0) {
+      direction = closest_point - frenet_ref_->getPoint(closest_idx - 1);
+    } else {
+      direction = Eigen::Vector2d(1.0, 0.0); // 默认方向
+    }
+    
+    // 计算点到参考线的有符号距离
+    direction.normalize();
+    Eigen::Vector2d normal(-direction.y(), direction.x()); // 法向量
+    double signed_dist = (point - closest_point).dot(normal);
+    
+    // 获取走廊宽度
+    double corridor_width = frenet_ref_->getCorridorDistanceAtIndex(closest_idx);
+    double half_width = corridor_width / 2.0;
+    
+    // 如果距离绝对值小于等于半宽，说明点在走廊内
+    return std::abs(signed_dist) <= half_width;
+  }
+  
+  /**
+   * @brief 获取点到走廊边界的距离
+   * @param point 要判断的点（世界坐标系）
+   * @return 距离值（正值表示在走廊内，负值表示超出走廊边界）
+   */
+  double getDistanceToCorridor(const Eigen::Vector2d &point) const {
+    // 如果没有Frenet参考轨迹，返回一个很大的值（表示无限远）
+    if (!frenet_ref_ || frenet_ref_->size() == 0) {
+      return std::numeric_limits<double>::max();
+    }
+    
+    // 找到最近的点
+    Eigen::Vector2d closest_point;
+    double min_dist = std::numeric_limits<double>::max();
+    size_t closest_idx = 0;
+    
+    for (size_t i = 0; i < frenet_ref_->size(); ++i) {
+      Eigen::Vector2d ref_point = frenet_ref_->getPoint(i);
+      double dist = (point - ref_point).norm();
+      if (dist < min_dist) {
+        min_dist = dist;
+        closest_point = ref_point;
+        closest_idx = i;
+      }
+    }
+    
+    // 计算方向向量
+    Eigen::Vector2d direction;
+    if (closest_idx < frenet_ref_->size() - 1) {
+      direction = frenet_ref_->getPoint(closest_idx + 1) - closest_point;
+    } else if (closest_idx > 0) {
+      direction = closest_point - frenet_ref_->getPoint(closest_idx - 1);
+    } else {
+      direction = Eigen::Vector2d(1.0, 0.0); // 默认方向
+    }
+    
+    // 计算点到参考线的有符号距离
+    direction.normalize();
+    Eigen::Vector2d normal(-direction.y(), direction.x()); // 法向量
+    double signed_dist = (point - closest_point).dot(normal);
+    
+    // 获取走廊宽度
+    double corridor_width = frenet_ref_->getCorridorDistanceAtIndex(closest_idx);
+    double half_width = corridor_width / 2.0;
+    
+    // 返回距离走廊边界的距离（正值表示在走廊内，负值表示超出走廊边界）
+    return half_width - std::abs(signed_dist);
   }
 
 public:

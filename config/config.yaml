@@ -1,107 +1,97 @@
 # TEB Local Planner Configuration
-# 轻量级机器人局部规划模块配置参数
+# 重点优化：绕障后快速回归主线
 
 # ==============================================================================
-# 机器人配置
+# 机器人配置（提升转向/速度恢复能力）
 # ==============================================================================
 robot:
-  # 机器人类型: differential_drive, ackermann, omnidirectional, legged
   type: "differential_drive"
+  # 适度提升前进速度上限（绕障后快速回归），保留角速度灵活性
+  max_vel_x: 0.12          
+  max_vel_x_backwards: 0.2  
+  max_vel_y: 0.0          
+  max_vel_theta: 0.9       # 进一步提升角速度，加快转向回归主线
 
-  # 运动学参数
-  max_vel_x: 0.8          # 最大前进速度 (m/s)
-  max_vel_x_backwards: 0.3  # 最大后退速度 (m/s)
-  max_vel_y: 0.0          # 最大侧向速度 (m/s) - 0表示非全向
-  max_vel_theta: 0.5      # 最大角速度 (rad/s)
+  # 加速度限制：放宽纵向加速度，让速度快速恢复
+  acc_lim_x: 1.2          
+  acc_lim_y: 0.5          
+  acc_lim_theta: 1.0      
 
-  # 加速度限制
-  acc_lim_x: 0.5          # 最大线加速度 (m/s²)
-  acc_lim_y: 0.5          # 最大侧向加速度 (m/s²)
-  acc_lim_theta: 0.5      # 最大角加速度 (rad/s²)
+  min_turning_radius: 0.2  
+  wheelbase: 0.5          
+  cmd_angle_instead_rotvel: false  
 
-  # 汽车机器人参数 (仅ackermann类型有效)
-  min_turning_radius: 0.0  # 最小转向半径 (m) - 0表示差分驱动
-  wheelbase: 0.5          # 轴距 (m)
-
-  # 控制模式
-  cmd_angle_instead_rotvel: false  # 是否使用角度控制代替角速度
-
-  # Footprint配置
   footprint:
-    type: "circle"        # circle 或 polygon
-    radius: 0.2          # 圆形半径 (m)
-    # 多边形顶点 (仅polygon类型有效) [[x1,y1], [x2,y2], ...]
+    type: "circle"        
+    radius: 0.2          
     vertices: [[0.2,0], [0.1,0.1], [-0.1,0.1], [-0.1,-0.1], [0.1,-0.1]]
 
 # ==============================================================================
-# 轨迹规划配置
+# 轨迹规划配置（加快轨迹收敛）
 # ==============================================================================
 trajectory:
-  # 时间分辨率
-  dt_ref: 0.3            # 期望时间分辨率 (s)
-  dt_hysteresis: 0.1     # 自动调整滞后 (s)
+  dt_ref: 0.15            # 进一步减小时间分辨率，轨迹更精细且收敛更快
+  dt_hysteresis: 0.03     # 降低滞后，快速响应主线轨迹
 
-  # 采样点数限制
-  min_samples: 3         # 最小采样点数
-  max_samples: 200       # 最大采样点数 (影响运算效率)
+  min_samples: 5         
+  max_samples: 150        # 减少最大采样点，避免轨迹过度分散
 
-  # 热启动参数
-  force_reinit_new_goal_dist: 1.0      # 强制重新初始化距离阈值 (m)
-  force_reinit_new_goal_angular: 1.57  # 强制重新初始化角度阈值 (rad)
+  # 触发轨迹重初始化的阈值：缩小距离/角度阈值，更快响应主线
+  force_reinit_new_goal_dist: 0.8      
+  force_reinit_new_goal_angular: 1.0  
 
 # ==============================================================================
-# 优化配置 (影响运算效率和执行效果)
+# 优化配置（提升回归主线权重）
 # ==============================================================================
 optimization:
-  # 迭代次数 (影响运算效率)
-  no_inner_iterations: 5   # 内层迭代次数
-  no_outer_iterations: 4   # 外层迭代次数
+  no_inner_iterations: 8   
+  no_outer_iterations: 6   
 
-  # 约束权重 (影响执行效果)
-  weight_max_vel_x: 2      # 最大线速度权重
-  weight_max_vel_theta: 1  # 最大角速度权重
-  weight_acc_lim_x: 1      # 线加速度权重
-  weight_acc_lim_theta: 1  # 角加速度权重
-  weight_kinematics_nh: 1000  # 非全向运动学权重
-  weight_obstacle: 50      # 障碍物避让权重
-  weight_frenet_corridor: 20  # Frenet走廊约束权重
+  # 核心调整：提升路径跟踪权重，降低过度避障的优先级
+  weight_max_vel_x: 1.5    # 提升速度权重，绕障后快速恢复速度
+  weight_max_vel_theta: 1  
+  weight_acc_lim_x: 1.0    # 恢复加速度权重，支持快速提速
+  weight_acc_lim_theta: 1.0  
+  weight_kinematics_nh: 1000  
+  weight_obstacle: 120     # 适度降低障碍物权重（避免过度避障）
+  weight_frenet_corridor: 40  # 大幅提升Frenet走廊权重，强制回归主线
 
 # ==============================================================================
-# 障碍物配置
+# 障碍物配置（避免过度远离主线）
 # ==============================================================================
 obstacles:
-  min_obstacle_dist: 0.5      # 最小障碍物距离 (m)
-  inflation_dist: 0.6         # 障碍物缓冲区距离 (m)
-  obstacle_poses_affected: 15 # 受障碍物影响的位姿数 (影响运算效率)
+  min_obstacle_dist: 0.35     # 小幅降低最小障碍物距离（保证安全的前提下）
+  inflation_dist: 0.6         # 缩小障碍物缓冲区，避免绕障过度偏离
+  obstacle_poses_affected: 15 # 减少受影响位姿数，仅关注近距离障碍物
+  obstacle_square_size: 2.5  
 
 # ==============================================================================
-# Frenet走廊约束配置
+# Frenet走廊约束（强制收敛到主线）
 # ==============================================================================
 frenet_corridor:
-  enabled: true           # 是否启用Frenet走廊约束
-  corridor_width: 1.0    # 走廊宽度 (m)
-  min_corridor_width: 0.5  # 最小走廊宽度 (m)
+  enabled: true           
+  corridor_width: 0.8     # 缩窄走廊，限制过度偏离
+  min_corridor_width: 0.4  # 同步缩小最小走廊宽度
 
 # ==============================================================================
-# 测试场景配置
+# 测试场景配置（提升回归效率）
 # ==============================================================================
 simulation:
-  dt: 0.1                # 仿真时间步长 (s)
-  robot_speed: 0.9       # 机器人前进速度 (m/s)
-  lookahead_distance: 4.0  # 规划前瞻距离 (m)
+  dt: 0.1                
+  robot_speed: 0.8       # 提升仿真速度，加快回归
+  lookahead_distance: 4.0  # 适度减小前瞻（避免过度关注远端障碍物）
 
-  # 动态障碍物配置
   obstacles:
-    count: 2             # 障碍物数量
-    amplitude: 0.6       # 运动振幅 (m)
-    frequency: 0.5       # 运动频率 (Hz)
-    phase_offset: 1.57   # 相位偏移 (rad)
+    count: 5             
+    amplitude: 5.0       
+    frequency: 0.1       
+    phase_offset: 1.57   
 
 # ==============================================================================
 # 可视化配置
 # ==============================================================================
 visualization:
-  show_corridor_boundaries: true  # 显示走廊边界
-  show_obstacles: true           # 显示障碍物
-  show_trajectory: true          # 显示规划轨迹
-  scale_factor: 50.0             # 显示缩放因子 (pixel/m)
+  show_corridor_boundaries: true  
+  show_obstacles: true           
+  show_trajectory: true          
+  scale_factor: 50.0             

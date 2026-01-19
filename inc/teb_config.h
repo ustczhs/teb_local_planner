@@ -201,6 +201,8 @@ public:
                                 //!< costmap_converter plugin processes the
                                 //!< current costmap (the value should not be
                                 //!< much higher than the costmap update rate)
+     // 正方形范围的大小（米）
+    double obstacle_square_size = 1.0;
   } obstacles; //!< Obstacle related parameters
 
   //! Optimization related parameters
@@ -509,17 +511,17 @@ public:
     optim.weight_kinematics_nh = 1000;
     optim.weight_kinematics_forward_drive = 1;
     optim.weight_kinematics_turning_radius = 1;
-    optim.weight_optimaltime = 1;
-    optim.weight_shortest_path = 0;
+    optim.weight_optimaltime = 10.0;
+    optim.weight_shortest_path = 50;
     optim.weight_obstacle = 50;
     optim.weight_inflation = 0.1;
     optim.weight_dynamic_obstacle = 50;
     optim.weight_dynamic_obstacle_inflation = 0.1;
-    optim.weight_viapoint = 1;
+    optim.weight_viapoint = 1000;
     optim.weight_prefer_rotdir = 50;
-    optim.weight_frenet_corridor = 10;
+    optim.weight_frenet_corridor = 10000;
 
-    optim.weight_adapt_factor = 2.0;
+    optim.weight_adapt_factor = 1.05;
     optim.obstacle_cost_exponent = 1.0;
 
     // Homotopy Class Planner

@@ -12,7 +12,7 @@ namespace teb_local_planner {
 TebOptimalPlanner::TebOptimalPlanner()
     : cfg_(NULL), obstacles_(NULL), via_points_(NULL), cost_(HUGE_VAL),
       prefer_rotdir_(RotType::none), robot_model_(new PointRobotFootprint()),
-      initialized_(false), optimized_(false) {}
+      initialized_(false), optimized_(false), obstacle_square_size_(5.0) {}
 
 TebOptimalPlanner::TebOptimalPlanner(const TebConfig &cfg,
                                      ObstContainer *obstacles,
@@ -46,6 +46,10 @@ void TebOptimalPlanner::initialize(const TebConfig &cfg,
   cost_ = HUGE_VAL;
   prefer_rotdir_ = RotType::none;
   setVisualization(visual);
+
+  // ============== 新增：初始化正方形范围大小 ==============
+  obstacle_square_size_ = cfg_->obstacles.obstacle_square_size;
+  // =====================================================
 
   vel_start_.first = true;
   vel_start_.second.linear.x() = 0;
@@ -241,6 +245,16 @@ void TebOptimalPlanner::setVelocityGoal(const Twist &vel_goal) {
   vel_goal_.second = vel_goal;
 }
 
+void TebOptimalPlanner::setFrenetReference(boost::shared_ptr<FrenetReference> frenet_ref) {
+  frenet_ref_ = frenet_ref;
+  if (frenet_ref_) {
+    if (!corridor_checker_) {
+      corridor_checker_ = std::make_unique<EdgeFrenetCorridor>();
+    }
+    corridor_checker_->setFrenetReference(frenet_ref_);
+  }
+}
+
 bool TebOptimalPlanner::plan(const std::vector<PoseStamped> &initial_plan,
                              const Twist *start_vel, bool free_goal_vel) {
   if (!teb_.isInit()) {
@@ -347,6 +361,7 @@ bool TebOptimalPlanner::buildGraph(double weight_multiplier) {
   AddTEBVertices();
 
   // add Edges (local cost functions)
+  // 然后添加障碍物约束，只考虑走廊内的障碍物
   if (cfg_->obstacles.legacy_obstacle_association)
     AddEdgesObstaclesLegacy(weight_multiplier);
   else
@@ -374,7 +389,7 @@ bool TebOptimalPlanner::buildGraph(double weight_multiplier) {
 
   AddEdgesPreferRotDir();
 
-  AddEdgesFrenetCorridor();
+  // AddEdgesFrenetCorridor();
 
   return true;
 }
@@ -444,6 +459,23 @@ void TebOptimalPlanner::AddTEBVertices() {
   }
 }
 
+bool TebOptimalPlanner::isObstacleInCorridor(const Obstacle* obstacle) const {
+  if (!frenet_ref_ || !obstacle) {
+    return true; // If no corridor reference or obstacle is null, consider all obstacles in corridor
+  }
+  
+  // Get the centroid of the obstacle
+  Eigen::Vector2d centroid = obstacle->getCentroid();
+  
+  // Use corridor checker to determine if the point is within corridor
+  if (!corridor_checker_) {
+    // If no corridor checker, create one (this should not happen if setFrenetReference was called)
+    return true;
+  }
+  
+  return corridor_checker_->isPointInCorridor(centroid);
+}
+
 void TebOptimalPlanner::AddEdgesObstacles(double weight_multiplier) {
   if (cfg_->optim.weight_obstacle == 0 || weight_multiplier == 0 ||
       obstacles_ == nullptr)
@@ -479,6 +511,18 @@ void TebOptimalPlanner::AddEdgesObstacles(double weight_multiplier) {
       // we handle dynamic obstacles differently below
       if (cfg_->obstacles.include_dynamic_obstacles && obst->isDynamic())
         continue;
+
+      // ============== 新增：检查障碍物是否在正方形范围内 ==============
+      if (!isObstacleInSquareRange(obst.get())) {
+        continue; // 跳过不在正方形范围内的障碍物
+      }
+      // ===========================================================
+      
+      // ============== 可选：检查障碍物是否在走廊内 ==============
+      if (!isObstacleInCorridor(obst.get())) {
+        continue; // Skip obstacles outside the corridor
+      }
+      // =======================================================
 
       // calculate distance to robot model
       double dist = robot_model_->calculateDistance(teb_.Pose(i), obst.get());
@@ -588,6 +632,18 @@ void TebOptimalPlanner::AddEdgesObstaclesLegacy(double weight_multiplier) {
         (*obst)->isDynamic()) // we handle dynamic obstacles differently below
       continue;
 
+    // ============== 新增：检查障碍物是否在正方形范围内 ==============
+    if (!isObstacleInSquareRange(obst->get())) {
+      continue; // 跳过不在正方形范围内的障碍物
+    }
+    // ===========================================================
+    
+    // ============== 可选：检查障碍物是否在走廊内 ==============
+    if (!isObstacleInCorridor(obst->get())) {
+      continue; // Skip obstacles outside the corridor
+    }
+    // =======================================================
+
     int index;
 
     if (cfg_->obstacles.obstacle_poses_affected >= teb_.sizePoses())
@@ -678,6 +734,18 @@ void TebOptimalPlanner::AddEdgesDynamicObstacles(double weight_multiplier) {
        obst != obstacles_->end(); ++obst) {
     if (!(*obst)->isDynamic())
       continue;
+
+    // ============== 新增：检查动态障碍物是否在正方形范围内 ==============
+    if (!isObstacleInSquareRange(obst->get())) {
+      continue; // 跳过不在正方形范围内的动态障碍物
+    }
+    // ==============================================================
+    
+    // ============== 可选：检查动态障碍物是否在走廊内 ==============
+    if (!isObstacleInCorridor(obst->get())) {
+      continue; // Skip dynamic obstacles outside the corridor
+    }
+    // ==========================================================
 
     // Skip first and last pose, as they are fixed
     double time = teb_.TimeDiff(0);
@@ -1275,5 +1343,20 @@ void TebOptimalPlanner::getFullTrajectory(
 //
 
 bool TebOptimalPlanner::isTrajectoryFeasible(void) { return true; }
-
+bool TebOptimalPlanner::isObstacleInSquareRange(const Obstacle* obstacle) const {
+    if (!obstacle || teb_.sizePoses() == 0) {
+        return false;
+    }
+    
+    // 获取机器人当前位置（第一个轨迹点）
+    Eigen::Vector2d robot_position = teb_.Pose(0).position();
+    Eigen::Vector2d obstacle_center = obstacle->getCentroid();
+    
+    // 计算障碍物中心到机器人当前位置的坐标差
+    double dx = std::abs(obstacle_center.x() - robot_position.x());
+    double dy = std::abs(obstacle_center.y() - robot_position.y());
+    
+    // 判断是否在正方形范围内
+    return (dx <= obstacle_square_size_ / 2.0 && dy <= obstacle_square_size_ / 2.0);
+}
 } // namespace teb_local_planner

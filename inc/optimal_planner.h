@@ -318,9 +318,7 @@ public:
    * @brief Set the Frenet reference for corridor constraints
    * @param frenet_ref Shared pointer to FrenetReference
    */
-  void setFrenetReference(boost::shared_ptr<FrenetReference> frenet_ref) {
-    frenet_ref_ = frenet_ref;
-  }
+  void setFrenetReference(boost::shared_ptr<FrenetReference> frenet_ref);
 
   /**
    * @brief Access the internal via-point container.
@@ -561,7 +559,13 @@ public:
   //                                          double circumscribed_radius=0.0,
   //                                          int look_ahead_idx=-1);
   virtual bool isTrajectoryFeasible(void);
-
+/**
+     * @brief 设置正方形范围的大小
+     * @param square_size 正方形的边长（米）
+     */
+    void setObstacleSquareSize(double square_size) {
+        obstacle_square_size_ = square_size;
+    }
   //@}
 
 protected:
@@ -753,6 +757,27 @@ protected:
    */
   boost::shared_ptr<g2o::SparseOptimizer> initOptimizer();
 
+  /**
+   * @brief Check if an obstacle is within the Frenet corridor
+   * @param obstacle Pointer to the obstacle
+   * @return True if the obstacle is within the corridor, false otherwise
+   */
+  bool isObstacleInCorridor(const Obstacle* obstacle) const;
+  Eigen::Vector2d findNearestPointInCorridor(const Eigen::Vector2d &point) const;
+  bool isPointInCorridor(const Eigen::Vector2d &point) const;
+  void adjustInitialTrajectoryToCorridor();
+ 
+    
+    /**
+     * @brief 判断障碍物是否在机器人当前位置的正方形范围内
+     * @param obstacle 障碍物指针
+     * @return true-在范围内，false-不在范围内
+     */
+    bool isObstacleInSquareRange(const Obstacle* obstacle) const;
+private:
+  // 用于检查障碍物是否在走廊内的工具
+  mutable std::unique_ptr<EdgeFrenetCorridor> corridor_checker_;
+
   // external objects (store weak pointers)
   const TebConfig
       *cfg_; //!< Config class that stores and manages all related parameters
@@ -781,10 +806,11 @@ protected:
                      //!< class
   bool optimized_;   //!< This variable is \c true as long as the last
                      //!< optimization has been completed successful
-
+ 
 public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-
+// 障碍物考虑的正方形范围大小
+    double obstacle_square_size_ = 1.0; // 默认1米
   // bool plan(const std::vector<PoseStamped> &initial_plan, const Twist
   // *start_vel, bool free_goal_vel);
 };
