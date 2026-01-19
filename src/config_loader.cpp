@@ -103,6 +103,25 @@ PlannerConfig loadConfig(const std::string &config_file) {
             
     }
 
+    // Load sensor configuration
+    if (yaml["sensor"]) {
+      auto sensor_node = yaml["sensor"];
+      config.teb_config.sensor.laser_topic =
+          sensor_node["laser_topic"].as<std::string>("/scan");
+      config.teb_config.sensor.fov_min_angle =
+          sensor_node["fov_min_angle"].as<double>(-1.745);
+      config.teb_config.sensor.fov_max_angle =
+          sensor_node["fov_max_angle"].as<double>(1.745);
+      config.teb_config.sensor.obstacle_memory_time =
+          sensor_node["obstacle_memory_time"].as<double>(3.0);
+      config.teb_config.sensor.cluster_distance_threshold =
+          sensor_node["cluster_distance_threshold"].as<double>(0.1);
+      config.teb_config.sensor.cluster_min_points =
+          sensor_node["cluster_min_points"].as<int>(3);
+      config.teb_config.sensor.downsample_factor =
+          sensor_node["downsample_factor"].as<int>(2);
+    }
+
     // Load simulation configuration
     if (yaml["simulation"]) {
       auto sim_node = yaml["simulation"];

@@ -415,6 +415,21 @@ public:
                                         //!< the detection of oscillations
   } recovery; //!< Parameters related to recovery and backup strategies
 
+  //! Sensor related parameters
+  struct Sensor {
+    std::string laser_topic;     //!< Topic name of the laser scan
+    double fov_min_angle;        //!< Minimum angle of the laser FOV (radians)
+    double fov_max_angle;        //!< Maximum angle of the laser FOV (radians)
+    double obstacle_memory_time; //!< Time to remember obstacles outside FOV
+                                 //!< (seconds)
+    double cluster_distance_threshold; //!< Distance threshold for point
+                                       //!< clustering (meters)
+    int cluster_min_points; //!< Minimum number of points to form a cluster
+    int downsample_factor;  //!< Downsampling factor for laser points (1 = no
+                            //!< downsampling)
+    double local_map_size;  //!< Local map size for filtering laser points (meters)
+  } sensor;                 //!< Sensor related parameters
+
   /**
    * @brief Construct the TebConfig using default values.
    * @warning If the \b rosparam server or/and \b dynamic_reconfigure
@@ -563,6 +578,17 @@ public:
     recovery.oscillation_omega_eps = 0.1;
     recovery.oscillation_recovery_min_duration = 10;
     recovery.oscillation_filter_duration = 10;
+
+    // Sensor
+
+    sensor.laser_topic = "/scan";
+    sensor.fov_min_angle = -1.745; // -100 degrees
+    sensor.fov_max_angle = 1.745;  // +100 degrees
+    sensor.obstacle_memory_time = 3.0;
+    sensor.cluster_distance_threshold = 0.1;
+    sensor.cluster_min_points = 3;
+    sensor.downsample_factor = 2;
+    sensor.local_map_size = 4.0;
   }
 
   /**
