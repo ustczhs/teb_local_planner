@@ -44,8 +44,8 @@ trajectory:
 # 优化配置（提升回归主线权重）
 # ==============================================================================
 optimization:
-  no_inner_iterations: 3   
-  no_outer_iterations: 2   
+  no_inner_iterations: 2   
+  no_outer_iterations: 1  
 
   # 核心调整：提升路径跟踪权重，降低过度避障的优先级
   weight_max_vel_x: 1.5    # 提升速度权重，绕障后快速恢复速度
@@ -95,7 +95,7 @@ simulation:
   lookahead_distance: 4.0  # 适度减小前瞻（避免过度关注远端障碍物）
 
   obstacles:
-    count: 5             
+    count: 10             
     amplitude: 5.0       
     frequency: 0.1       
     phase_offset: 1.57   
