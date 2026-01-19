@@ -535,7 +535,7 @@ int main() {
     // Get and draw planned trajectory
     std::vector<Eigen::Vector3f> planned_path;
     planner->getFullTrajectory(planned_path);
-
+std::cout<<"Planned path size: "<<planned_path.size()<<std::endl;
     // ==================== 核心修改：使用TEB输出的速度更新机器人状态 ====================
     float teb_v = 0.0, teb_omega = 0.0;
     if (plan_success) {
@@ -637,7 +637,7 @@ int main() {
     cv::imshow("TEB Planner Test", frame);
 
     // Check for exit
-    int key = cv::waitKey(10); // 10ms delay for ~100 FPS
+    int key = cv::waitKey(1); // 10ms delay for ~100 FPS
     if (key == 27) {           // ESC
       std::cout << "Simulation stopped by user" << std::endl;
       break;
@@ -662,6 +662,7 @@ int main() {
       std::cout << "Simulation completed!" << std::endl;
       break;
     }
+    usleep(1000);
   }
 
   delete planner;

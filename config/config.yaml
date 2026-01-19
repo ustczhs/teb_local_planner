@@ -44,8 +44,8 @@ trajectory:
 # 优化配置（提升回归主线权重）
 # ==============================================================================
 optimization:
-  no_inner_iterations: 8   
-  no_outer_iterations: 6   
+  no_inner_iterations: 3   
+  no_outer_iterations: 2   
 
   # 核心调整：提升路径跟踪权重，降低过度避障的优先级
   weight_max_vel_x: 1.5    # 提升速度权重，绕障后快速恢复速度
