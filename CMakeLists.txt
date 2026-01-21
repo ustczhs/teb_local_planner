@@ -7,8 +7,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/cmake_modules)
 
 # ROS node compilation options - ROS1 Noetic 环境 正确配置
-option(ENABLE_ROS1_NODE "Enable ROS1 node compilation" ON)
-option(ENABLE_ROS2_NODE "Enable ROS2 node compilation" OFF)
+option(ENABLE_ROS1_NODE "Enable ROS1 node compilation" OFF)
+option(ENABLE_ROS2_NODE "Enable ROS2 node compilation" ON)
 
 # 基础必装依赖 (所有环境通用)
 find_package(Boost REQUIRED COMPONENTS system thread graph)
@@ -18,20 +18,7 @@ find_package(OpenCV REQUIRED)
 find_package(fmt REQUIRED)
 find_package(yaml-cpp REQUIRED)
 
-# ========== ROS1 Noetic 完整依赖配置 (核心新增) ==========
-if(ENABLE_ROS1_NODE)
-    find_package(catkin REQUIRED COMPONENTS
-        roscpp
-        sensor_msgs
-        geometry_msgs
-        nav_msgs
-        tf
-        tf2_ros
-        visualization_msgs
-        std_msgs
-        dynamic_reconfigure
-    )
-endif()
+
 
 # 头文件目录 (包含ROS1头文件)
 include_directories(
@@ -43,12 +30,7 @@ include_directories(
         ${YAML_CPP_INCLUDE_DIR}
 )
 
-# ROS1头文件追加
-if(ENABLE_ROS1_NODE)
-include_directories(
-        ${catkin_INCLUDE_DIRS}
-)
-endif()
+
 
 # TEB核心库编译 (保留你所有的源文件，无删减)
 add_library(lib_teb
@@ -100,6 +82,22 @@ target_link_libraries(
 
 # ========== ROS1 Noetic 节点编译 (补全实现，非占位符) ==========
 if(ENABLE_ROS1_NODE)
+    find_package(catkin REQUIRED COMPONENTS
+        roscpp
+        sensor_msgs
+        geometry_msgs
+        nav_msgs
+        tf
+        tf2_ros
+        visualization_msgs
+        std_msgs
+        dynamic_reconfigure
+    )
+
+    include_directories(
+        ${catkin_INCLUDE_DIRS}
+    )
+
     # 编译ROS1节点文件 (如果你的ROS1节点代码在node/ros1_node.cpp)
     add_executable(teb_ros1_node node/ros1_node.cpp)
     target_link_libraries(teb_ros1_node

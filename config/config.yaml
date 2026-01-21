@@ -50,8 +50,8 @@ optimization:
   # 核心调整：提升路径跟踪权重，降低过度避障的优先级
   weight_max_vel_x: 1.5    # 提升速度权重，绕障后快速恢复速度
   weight_max_vel_theta: 1  
-  weight_acc_lim_x: 1.0    # 恢复加速度权重，支持快速提速
-  weight_acc_lim_theta: 1.0  
+  weight_acc_lim_x: 12.0    # 恢复加速度权重，支持快速提速
+  weight_acc_lim_theta: 12.0  
   weight_kinematics_nh: 1000  
   weight_obstacle: 120     # 适度降低障碍物权重（避免过度避障）
   weight_frenet_corridor: 40  # 大幅提升Frenet走廊权重，强制回归主线
@@ -91,7 +91,7 @@ sensor:
 # ==============================================================================
 simulation:
   dt: 0.1                
-  robot_speed: 0.8       # 提升仿真速度，加快回归
+  robot_speed: 1.0       # 提升仿真速度，加快回归
   lookahead_distance: 4.0  # 适度减小前瞻（避免过度关注远端障碍物）
 
   obstacles:

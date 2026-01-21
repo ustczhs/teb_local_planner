@@ -1,0 +1,99 @@
+---
+Language: Cpp
+BasedOnStyle: LLVM
+
+# ==================== 基础设置 ====================
+# 缩进设置 - 匹配现有代码的2个空格缩进
+IndentWidth: 2
+# 重要：使用空格而不是制表符，确保跨平台一致性
+UseTab: Never
+TabWidth: 2
+
+# 行长度 - 不限制以保持现有格式
+ColumnLimit: 0
+
+# ==================== 括号和控制结构 ====================
+# 括号和控制结构 - 匹配现有风格
+BreakBeforeBraces: Attach
+
+# 访问修饰符缩进（public/private/protected）
+AccessModifierOffset: -2
+
+# case标签缩进
+IndentCaseLabels: false
+
+# ==================== 括号和空格 ====================
+# 括号和空格 - 匹配现有风格
+SpaceBeforeParens: Never
+SpacesInParentheses: false
+SpacesInAngles: false
+SpacesInCStyleCastParentheses: false
+SpacesInContainerLiterals: true
+
+# ==================== 指针和引用 ====================
+# 指针和引用 - 匹配现有风格
+PointerAlignment: Left
+
+# ==================== 包含文件 ====================
+# 包含文件 - 不排序以保持现有分组
+SortIncludes: false
+
+# ==================== 构造函数和初始化 ====================
+# 构造函数初始化列表格式
+ConstructorInitializerAllOnOneLineOrOnePerLine: false
+ConstructorInitializerIndentWidth: 4
+
+# ==================== 命名空间 ====================
+# 命名空间缩进
+NamespaceIndentation: None
+
+# ==================== 函数 ====================
+# 函数参数和返回类型
+AlignAfterOpenBracket: Align
+AllowAllArgumentsOnNextLine: true
+AllowAllParametersOfDeclarationOnNextLine: true
+AllowShortFunctionsOnASingleLine: All
+
+# ==================== 控制流 ====================
+# 允许短的if/while/for语句在同一行
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortIfStatementsOnASingleLine: true
+AllowShortLoopsOnASingleLine: true
+
+# ==================== 运算符 ====================
+# 运算符空格
+SpaceBeforeAssignmentOperators: true
+BreakBeforeBinaryOperators: None
+BreakBeforeTernaryOperators: true
+
+# ==================== 模板 ====================
+# 模板相关
+AlwaysBreakTemplateDeclarations: false
+
+# ==================== 类型转换 ====================
+SpaceAfterCStyleCast: false
+
+# ==================== 注释 ====================
+# 注释处理
+ReflowComments: true
+AlignTrailingComments: true
+
+# ==================== 空行 ====================
+# 空行处理
+MaxEmptyLinesToKeep: 1
+
+# ==================== 声明和定义 ====================
+# 声明排序
+SortUsingDeclarations: true
+
+# ==================== 其他 ====================
+# 二元运算符打包
+BinPackArguments: true
+BinPackParameters: true
+
+# 数组初始化
+Cpp11BracedListStyle: true
+
+# 标准设置
+Standard: Auto
