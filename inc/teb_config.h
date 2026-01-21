@@ -22,19 +22,19 @@ public:
 
   //! Trajectory related parameters
   struct Trajectory {
-    double teb_autosize; //!< Enable automatic resizing of the trajectory w.r.t
-                         //!< to the temporal resolution (recommended)
-    double dt_ref; //!< Desired temporal resolution of the trajectory (should be
-                   //!< in the magniture of the underlying control rate)
-    double dt_hysteresis; //!< Hysteresis for automatic resizing depending on
-                          //!< the current temporal resolution (dt): usually 10%
-                          //!< of dt_ref
-    int min_samples; //!< Minimum number of samples (should be always greater
-                     //!< than 2)
-    int max_samples; //!< Maximum number of samples; Warning: if too small the
-                     //!< discretization/resolution might not be sufficient for
-                     //!< the given robot model or obstacle avoidance does not
-                     //!< work anymore.
+    double teb_autosize;                    //!< Enable automatic resizing of the trajectory w.r.t
+                                            //!< to the temporal resolution (recommended)
+    double dt_ref;                          //!< Desired temporal resolution of the trajectory (should be
+                                            //!< in the magniture of the underlying control rate)
+    double dt_hysteresis;                   //!< Hysteresis for automatic resizing depending on
+                                            //!< the current temporal resolution (dt): usually 10%
+                                            //!< of dt_ref
+    int min_samples;                        //!< Minimum number of samples (should be always greater
+                                            //!< than 2)
+    int max_samples;                        //!< Maximum number of samples; Warning: if too small the
+                                            //!< discretization/resolution might not be sufficient for
+                                            //!< the given robot model or obstacle avoidance does not
+                                            //!< work anymore.
     bool global_plan_overwrite_orientation; //!< Overwrite orientation of local
                                             //!< subgoals provided by the global
                                             //!< planner
@@ -50,8 +50,8 @@ public:
         global_plan_viapoint_sep; //!< Min. separation between each two
                                   //!< consecutive via-points extracted from the
                                   //!< global plan (if negative: disabled)
-    bool via_points_ordered; //!< If true, the planner adheres to the order of
-                             //!< via-points in the storage container
+    bool via_points_ordered;      //!< If true, the planner adheres to the order of
+                                  //!< via-points in the storage container
     double
         max_global_plan_lookahead_dist; //!< Specify maximum length (cumulative
                                         //!< Euclidean distances) of the subset
@@ -62,53 +62,53 @@ public:
     double global_plan_prune_distance;  //!< Distance between robot and
                                         //!< via_points of global plan which is
                                         //!< used for pruning
-    bool exact_arc_length; //!< If true, the planner uses the exact arc length
-                           //!< in velocity, acceleration and turning rate
-                           //!< computations [-> increased cpu time], otherwise
-                           //!< the euclidean approximation is used.
+    bool exact_arc_length;              //!< If true, the planner uses the exact arc length
+                                        //!< in velocity, acceleration and turning rate
+                                        //!< computations [-> increased cpu time], otherwise
+                                        //!< the euclidean approximation is used.
     double
-        force_reinit_new_goal_dist; //!< Reinitialize the trajectory if a
-                                    //!< previous goal is updated with a
-                                    //!< seperation of more than the specified
-                                    //!< value in meters (skip hot-starting)
-    double force_reinit_new_goal_angular; //!< Reinitialize the trajectory if a
-                                          //!< previous goal is updated with an
-                                          //!< angular difference of more than
-                                          //!< the specified value in radians
-                                          //!< (skip hot-starting)
-    int feasibility_check_no_poses;       //!< Specify up to which pose on the
-                                    //!< predicted plan the feasibility should
-                                    //!< be checked each sampling interval.
-    bool publish_feedback; //!< Publish planner feedback containing the full
-                           //!< trajectory and a list of active obstacles
-                           //!< (should be enabled only for evaluation or
-                           //!< debugging purposes)
+        force_reinit_new_goal_dist;                //!< Reinitialize the trajectory if a
+                                                   //!< previous goal is updated with a
+                                                   //!< seperation of more than the specified
+                                                   //!< value in meters (skip hot-starting)
+    double force_reinit_new_goal_angular;          //!< Reinitialize the trajectory if a
+                                                   //!< previous goal is updated with an
+                                                   //!< angular difference of more than
+                                                   //!< the specified value in radians
+                                                   //!< (skip hot-starting)
+    int feasibility_check_no_poses;                //!< Specify up to which pose on the
+                                                   //!< predicted plan the feasibility should
+                                                   //!< be checked each sampling interval.
+    bool publish_feedback;                         //!< Publish planner feedback containing the full
+                                                   //!< trajectory and a list of active obstacles
+                                                   //!< (should be enabled only for evaluation or
+                                                   //!< debugging purposes)
     double min_resolution_collision_check_angular; //! Min angular resolution
                                                    //! used during the costmap
                                                    //! collision check. If not
                                                    //! respected, intermediate
                                                    //! samples are added. [rad]
-    int control_look_ahead_poses; //! Index of the pose used to extract the
-                                  //! velocity command
-  } trajectory;                   //!< Trajectory related parameters
+    int control_look_ahead_poses;                  //! Index of the pose used to extract the
+                                                   //! velocity command
+  } trajectory;                                    //!< Trajectory related parameters
 
   //! Robot related parameters
   struct Robot {
-    double max_vel_x;           //!< Maximum translational velocity of the robot
-    double max_vel_x_backwards; //!< Maximum translational velocity of the robot
-                                //!< for driving backwards
-    double max_vel_y;     //!< Maximum strafing velocity of the robot (should be
-                          //!< zero for non-holonomic robots!)
-    double max_vel_theta; //!< Maximum angular velocity of the robot
-    double acc_lim_x;     //!< Maximum translational acceleration of the robot
-    double acc_lim_y;     //!< Maximum strafing acceleration of the robot
-    double acc_lim_theta; //!< Maximum angular acceleration of the robot
-    double min_turning_radius; //!< Minimum turning radius of a carlike robot
-                               //!< (diff-drive robot: zero);
-    double wheelbase; //!< The distance between the drive shaft and steering
-                      //!< axle (only required for a carlike robot with
-                      //!< 'cmd_angle_instead_rotvel' enabled); The value might
-                      //!< be negative for back-wheeled robots!
+    double max_vel_x;              //!< Maximum translational velocity of the robot
+    double max_vel_x_backwards;    //!< Maximum translational velocity of the robot
+                                   //!< for driving backwards
+    double max_vel_y;              //!< Maximum strafing velocity of the robot (should be
+                                   //!< zero for non-holonomic robots!)
+    double max_vel_theta;          //!< Maximum angular velocity of the robot
+    double acc_lim_x;              //!< Maximum translational acceleration of the robot
+    double acc_lim_y;              //!< Maximum strafing acceleration of the robot
+    double acc_lim_theta;          //!< Maximum angular acceleration of the robot
+    double min_turning_radius;     //!< Minimum turning radius of a carlike robot
+                                   //!< (diff-drive robot: zero);
+    double wheelbase;              //!< The distance between the drive shaft and steering
+                                   //!< axle (only required for a carlike robot with
+                                   //!< 'cmd_angle_instead_rotvel' enabled); The value might
+                                   //!< be negative for back-wheeled robots!
     bool cmd_angle_instead_rotvel; //!< Substitute the rotational velocity in
                                    //!< the commanded velocity message by the
                                    //!< corresponding steering angle (check
@@ -122,47 +122,47 @@ public:
     double yaw_goal_tolerance; //!< Allowed final orientation error
     double xy_goal_tolerance;  //!< Allowed final euclidean distance to the goal
                                //!< position
-    bool free_goal_vel; //!< Allow the robot's velocity to be nonzero (usally
-                        //!< max_vel) for planning purposes
+    bool free_goal_vel;        //!< Allow the robot's velocity to be nonzero (usally
+                               //!< max_vel) for planning purposes
     bool complete_global_plan; // true prevents the robot from ending the path
                                // early when it cross the end goal
   } goal_tolerance;            //!< Goal tolerance related parameters
 
   //! Obstacle related parameters
   struct Obstacles {
-    double min_obstacle_dist; //!< Minimum desired separation from obstacles
-    double inflation_dist;    //!< buffer zone around obstacles with non-zero
-                              //!< penalty costs (should be larger than
-                              //!< min_obstacle_dist in order to take effect)
-    double dynamic_obstacle_inflation_dist; //!< Buffer zone around predicted
-                                            //!< locations of dynamic obstacles
-                                            //!< with non-zero penalty costs
-                                            //!< (should be larger than
-                                            //!< min_obstacle_dist in order to
-                                            //!< take effect)
-    bool include_dynamic_obstacles; //!< Specify whether the movement of dynamic
-                                    //!< obstacles should be predicted by a
-                                    //!< constant velocity model (this also
-                                    //!< effects homotopy class planning); If
-                                    //!< false, all obstacles are considered to
-                                    //!< be static.
-    bool include_costmap_obstacles; //!< Specify whether the obstacles in the
-                                    //!< costmap should be taken into account
-                                    //!< directly
+    double min_obstacle_dist;                   //!< Minimum desired separation from obstacles
+    double inflation_dist;                      //!< buffer zone around obstacles with non-zero
+                                                //!< penalty costs (should be larger than
+                                                //!< min_obstacle_dist in order to take effect)
+    double dynamic_obstacle_inflation_dist;     //!< Buffer zone around predicted
+                                                //!< locations of dynamic obstacles
+                                                //!< with non-zero penalty costs
+                                                //!< (should be larger than
+                                                //!< min_obstacle_dist in order to
+                                                //!< take effect)
+    bool include_dynamic_obstacles;             //!< Specify whether the movement of dynamic
+                                                //!< obstacles should be predicted by a
+                                                //!< constant velocity model (this also
+                                                //!< effects homotopy class planning); If
+                                                //!< false, all obstacles are considered to
+                                                //!< be static.
+    bool include_costmap_obstacles;             //!< Specify whether the obstacles in the
+                                                //!< costmap should be taken into account
+                                                //!< directly
     double costmap_obstacles_behind_robot_dist; //!< Limit the occupied local
                                                 //!< costmap obstacles taken
                                                 //!< into account for planning
                                                 //!< behind the robot (specify
                                                 //!< distance in meters)
-    int obstacle_poses_affected; //!< The obstacle position is attached to the
-                                 //!< closest pose on the trajectory to reduce
-                                 //!< computational effort, but take a number of
-                                 //!< neighbors into account as well
-    bool legacy_obstacle_association; //!< If true, the old association strategy
-                                      //!< is used (for each obstacle, find the
-                                      //!< nearest TEB pose), otherwise the new
-                                      //!< one (for each teb pose, find only
-                                      //!< "relevant" obstacles).
+    int obstacle_poses_affected;                //!< The obstacle position is attached to the
+                                                //!< closest pose on the trajectory to reduce
+                                                //!< computational effort, but take a number of
+                                                //!< neighbors into account as well
+    bool legacy_obstacle_association;           //!< If true, the old association strategy
+                                                //!< is used (for each obstacle, find the
+                                                //!< nearest TEB pose), otherwise the new
+                                                //!< one (for each teb pose, find only
+                                                //!< "relevant" obstacles).
     double
         obstacle_association_force_inclusion_factor; //!< The non-legacy
                                                      //!< obstacle association
@@ -191,16 +191,18 @@ public:
                                             //!< obstacle_association_force_inclusion_factor
                                             //!< is processed first.
     std::string
-        costmap_converter_plugin; //!< Define a plugin name of the
-                                  //!< costmap_converter package (costmap cells
-                                  //!< are converted to points/lines/polygons)
+        costmap_converter_plugin;       //!< Define a plugin name of the
+                                        //!< costmap_converter package (costmap cells
+                                        //!< are converted to points/lines/polygons)
     bool costmap_converter_spin_thread; //!< If \c true, the costmap converter
                                         //!< invokes its callback queue in a
                                         //!< different thread
     int costmap_converter_rate;         //!< The rate that defines how often the
-                                //!< costmap_converter plugin processes the
-                                //!< current costmap (the value should not be
-                                //!< much higher than the costmap update rate)
+                                        //!< costmap_converter plugin processes the
+                                        //!< current costmap (the value should not be
+                                        //!< much higher than the costmap update rate)
+                                        // 正方形范围的大小（米）
+    double obstacle_square_size = 1.0;
   } obstacles; //!< Obstacle related parameters
 
   //! Optimization related parameters
@@ -217,61 +219,61 @@ public:
     double penalty_epsilon; //!< Add a small safety margin to penalty functions
                             //!< for hard-constraint approximations
 
-    double weight_max_vel_x; //!< Optimization weight for satisfying the maximum
-                             //!< allowed translational velocity
-    double weight_max_vel_y; //!< Optimization weight for satisfying the maximum
-                             //!< allowed strafing velocity (in use only for
-                             //!< holonomic robots)
+    double weight_max_vel_x;     //!< Optimization weight for satisfying the maximum
+                                 //!< allowed translational velocity
+    double weight_max_vel_y;     //!< Optimization weight for satisfying the maximum
+                                 //!< allowed strafing velocity (in use only for
+                                 //!< holonomic robots)
     double weight_max_vel_theta; //!< Optimization weight for satisfying the
                                  //!< maximum allowed angular velocity
-    double weight_acc_lim_x; //!< Optimization weight for satisfying the maximum
-                             //!< allowed translational acceleration
-    double weight_acc_lim_y; //!< Optimization weight for satisfying the maximum
-                             //!< allowed strafing acceleration (in use only for
-                             //!< holonomic robots)
+    double weight_acc_lim_x;     //!< Optimization weight for satisfying the maximum
+                                 //!< allowed translational acceleration
+    double weight_acc_lim_y;     //!< Optimization weight for satisfying the maximum
+                                 //!< allowed strafing acceleration (in use only for
+                                 //!< holonomic robots)
     double weight_acc_lim_theta; //!< Optimization weight for satisfying the
                                  //!< maximum allowed angular acceleration
     double weight_kinematics_nh; //!< Optimization weight for satisfying the
                                  //!< non-holonomic kinematics
     double
-        weight_kinematics_forward_drive; //!< Optimization weight for forcing
-                                         //!< the robot to choose only forward
-                                         //!< directions (positive transl.
-                                         //!< velocities, only diffdrive robot)
+        weight_kinematics_forward_drive;     //!< Optimization weight for forcing
+                                             //!< the robot to choose only forward
+                                             //!< directions (positive transl.
+                                             //!< velocities, only diffdrive robot)
     double weight_kinematics_turning_radius; //!< Optimization weight for
                                              //!< enforcing a minimum turning
                                              //!< radius (carlike robots)
-    double weight_optimaltime;   //!< Optimization weight for contracting the
-                                 //!< trajectory w.r.t. transition time
-    double weight_shortest_path; //!< Optimization weight for contracting the
-                                 //!< trajectory w.r.t. path length
-    double weight_obstacle;  //!< Optimization weight for satisfying a minimum
-                             //!< separation from obstacles
-    double weight_inflation; //!< Optimization weight for the inflation penalty
-                             //!< (should be small)
+    double weight_optimaltime;               //!< Optimization weight for contracting the
+                                             //!< trajectory w.r.t. transition time
+    double weight_shortest_path;             //!< Optimization weight for contracting the
+                                             //!< trajectory w.r.t. path length
+    double weight_obstacle;                  //!< Optimization weight for satisfying a minimum
+                                             //!< separation from obstacles
+    double weight_inflation;                 //!< Optimization weight for the inflation penalty
+                                             //!< (should be small)
     double
-        weight_dynamic_obstacle; //!< Optimization weight for satisfying a
-                                 //!< minimum separation from dynamic obstacles
+        weight_dynamic_obstacle;              //!< Optimization weight for satisfying a
+                                              //!< minimum separation from dynamic obstacles
     double weight_dynamic_obstacle_inflation; //!< Optimization weight for the
                                               //!< inflation penalty of dynamic
                                               //!< obstacles (should be small)
-    double weight_viapoint; //!< Optimization weight for minimizing the distance
-                            //!< to via-points
-    double weight_prefer_rotdir;   //!< Optimization weight for preferring a
-                                   //!< specific turning direction (-> currently
-                                   //!< only activated if an oscillation is
-                                   //!< detected, see 'oscillation_recovery'
-    double weight_frenet_corridor; //!< Optimization weight for enforcing Frenet
-                                   //!< corridor constraints
+    double weight_viapoint;                   //!< Optimization weight for minimizing the distance
+                                              //!< to via-points
+    double weight_prefer_rotdir;              //!< Optimization weight for preferring a
+                                              //!< specific turning direction (-> currently
+                                              //!< only activated if an oscillation is
+                                              //!< detected, see 'oscillation_recovery'
+    double weight_frenet_corridor;            //!< Optimization weight for enforcing Frenet
+                                              //!< corridor constraints
 
-    double weight_adapt_factor; //!< Some special weights (currently
-                                //!< 'weight_obstacle') are repeatedly scaled by
-                                //!< this factor in each outer TEB iteration
-                                //!< (weight_new = weight_old*factor);
-                                //!< Increasing weights iteratively instead of
-                                //!< setting a huge value a-priori leads to
-                                //!< better numerical conditions of the
-                                //!< underlying optimization problem.
+    double weight_adapt_factor;    //!< Some special weights (currently
+                                   //!< 'weight_obstacle') are repeatedly scaled by
+                                   //!< this factor in each outer TEB iteration
+                                   //!< (weight_new = weight_old*factor);
+                                   //!< Increasing weights iteratively instead of
+                                   //!< setting a huge value a-priori leads to
+                                   //!< better numerical conditions of the
+                                   //!< underlying optimization problem.
     double obstacle_cost_exponent; //!< Exponent for nonlinear obstacle cost
                                    //!< (cost = linear_cost *
                                    //!< obstacle_cost_exponent). Set to 1 to
@@ -279,34 +281,34 @@ public:
   } optim;                         //!< Optimization related parameters
 
   struct HomotopyClasses {
-    bool enable_homotopy_class_planning; //!< Activate homotopy class planning
-                                         //!< (Requires much more resources that
-                                         //!< simple planning, since multiple
-                                         //!< trajectories are optimized at
-                                         //!< once).
-    bool enable_multithreading; //!< Activate multiple threading for planning
-                                //!< multiple trajectories in parallel.
-    bool simple_exploration; //!< If true, distinctive trajectories are explored
-                             //!< using a simple left-right approach (pass each
-                             //!< obstacle on the left or right side) for path
-                             //!< generation, otherwise sample possible roadmaps
-                             //!< randomly in a specified region between start
-                             //!< and goal.
-    int max_number_classes;  //!< Specify the maximum number of allowed
-                             //!< alternative homotopy classes (limits
-                             //!< computational effort)
-    double selection_cost_hysteresis; //!< Specify how much trajectory cost must
-                                      //!< a new candidate have w.r.t. a
-                                      //!< previously selected trajectory in
-                                      //!< order to be selected (selection if
-                                      //!< new_cost < old_cost*factor).
+    bool enable_homotopy_class_planning;  //!< Activate homotopy class planning
+                                          //!< (Requires much more resources that
+                                          //!< simple planning, since multiple
+                                          //!< trajectories are optimized at
+                                          //!< once).
+    bool enable_multithreading;           //!< Activate multiple threading for planning
+                                          //!< multiple trajectories in parallel.
+    bool simple_exploration;              //!< If true, distinctive trajectories are explored
+                                          //!< using a simple left-right approach (pass each
+                                          //!< obstacle on the left or right side) for path
+                                          //!< generation, otherwise sample possible roadmaps
+                                          //!< randomly in a specified region between start
+                                          //!< and goal.
+    int max_number_classes;               //!< Specify the maximum number of allowed
+                                          //!< alternative homotopy classes (limits
+                                          //!< computational effort)
+    double selection_cost_hysteresis;     //!< Specify how much trajectory cost must
+                                          //!< a new candidate have w.r.t. a
+                                          //!< previously selected trajectory in
+                                          //!< order to be selected (selection if
+                                          //!< new_cost < old_cost*factor).
     double selection_prefer_initial_plan; //!< Specify a cost reduction in the
                                           //!< interval (0,1) for the trajectory
                                           //!< in the equivalence class of the
                                           //!< initial plan.
     double
-        selection_obst_cost_scale; //!< Extra scaling of obstacle cost terms
-                                   //!< just for selecting the 'best' candidate.
+        selection_obst_cost_scale;        //!< Extra scaling of obstacle cost terms
+                                          //!< just for selecting the 'best' candidate.
     double selection_viapoint_cost_scale; //!< Extra scaling of via-point cost
                                           //!< terms just for selecting the
                                           //!< 'best' candidate.
@@ -317,9 +319,9 @@ public:
                                    //!< needs to be expired before a switch to
                                    //!< new equivalence class is allowed
 
-    int roadmap_graph_no_samples; //! < Specify the number of samples generated
-                                  //! for creating the roadmap graph, if
-                                  //! simple_exploration is turend off.
+    int roadmap_graph_no_samples;    //! < Specify the number of samples generated
+                                     //! for creating the roadmap graph, if
+                                     //! simple_exploration is turend off.
     double roadmap_graph_area_width; //!< Random keypoints/waypoints are sampled
                                      //!< in a rectangular region between start
                                      //!< and goal. Specify the width of that
@@ -331,22 +333,22 @@ public:
                                          //!< This parameter further scales the
                                          //!< distance such that the geometric
                                          //!< center remains equal!
-    double h_signature_prescaler; //!< Scale number of obstacle value in order
-                                  //!< to allow huge number of obstacles. Do not
-                                  //!< choose it extremly low, otherwise
-                                  //!< obstacles cannot be distinguished from
-                                  //!< each other (0.2<H<=1).
-    double h_signature_threshold; //!< Two h-signatures are assumed to be equal,
-                                  //!< if both the difference of real parts and
-                                  //!< complex parts are below the specified
-                                  //!< threshold.
+    double h_signature_prescaler;        //!< Scale number of obstacle value in order
+                                         //!< to allow huge number of obstacles. Do not
+                                         //!< choose it extremly low, otherwise
+                                         //!< obstacles cannot be distinguished from
+                                         //!< each other (0.2<H<=1).
+    double h_signature_threshold;        //!< Two h-signatures are assumed to be equal,
+                                         //!< if both the difference of real parts and
+                                         //!< complex parts are below the specified
+                                         //!< threshold.
 
     double
-        obstacle_keypoint_offset; //!< If simple_exploration is turned on, this
-                                  //!< parameter determines the distance on the
-                                  //!< left and right side of the obstacle at
-                                  //!< which a new keypoint will be cretead (in
-                                  //!< addition to min_obstacle_dist).
+        obstacle_keypoint_offset;      //!< If simple_exploration is turned on, this
+                                       //!< parameter determines the distance on the
+                                       //!< left and right side of the obstacle at
+                                       //!< which a new keypoint will be cretead (in
+                                       //!< addition to min_obstacle_dist).
     double obstacle_heading_threshold; //!< Specify the value of the normalized
                                        //!< scalar product between obstacle
                                        //!< heading and goal heading in order to
@@ -368,15 +370,15 @@ public:
                                              //!< using the time as the z-axis
                                              //!< scaled by this value. Most
                                              //!< useful for dynamic obstacles.
-    bool delete_detours_backwards; //!< If enabled, the planner will discard the
-                                   //!< plans detouring backwards with respect
-                                   //!< to the best plan
-    double detours_orientation_tolerance; //!< A plan is considered a detour if
-                                          //!< its start orientation differs
-                                          //!< more than this from the best plan
-    double length_start_orientation_vector; //!< Length of the vector used to
-                                            //!< compute the start orientation
-                                            //!< of a plan
+    bool delete_detours_backwards;           //!< If enabled, the planner will discard the
+                                             //!< plans detouring backwards with respect
+                                             //!< to the best plan
+    double detours_orientation_tolerance;    //!< A plan is considered a detour if
+                                             //!< its start orientation differs
+                                             //!< more than this from the best plan
+    double length_start_orientation_vector;  //!< Length of the vector used to
+                                             //!< compute the start orientation
+                                             //!< of a plan
     double
         max_ratio_detours_duration_best_duration; //!< Detours are discarted if
                                                   //!< their execution time /
@@ -386,47 +388,47 @@ public:
 
   //! Recovery/backup related parameters
   struct Recovery {
-    bool shrink_horizon_backup; //!< Allows the planner to shrink the horizon
-                                //!< temporary (50%) in case of automatically
-                                //!< detected issues.
+    bool shrink_horizon_backup;         //!< Allows the planner to shrink the horizon
+                                        //!< temporary (50%) in case of automatically
+                                        //!< detected issues.
     double shrink_horizon_min_duration; //!< Specify minimum duration for the
                                         //!< reduced horizon in case an
                                         //!< infeasible trajectory is detected.
-    bool oscillation_recovery; //!< Try to detect and resolve oscillations
-                               //!< between multiple solutions in the same
-                               //!< equivalence class (robot frequently switches
-                               //!< between left/right/forward/backwards)
-    double oscillation_v_eps;  //!< Threshold for the average normalized linear
-                               //!< velocity: if oscillation_v_eps and
-                               //!< oscillation_omega_eps are not exceeded both,
-                               //!< a possible oscillation is detected
+    bool oscillation_recovery;          //!< Try to detect and resolve oscillations
+                                        //!< between multiple solutions in the same
+                                        //!< equivalence class (robot frequently switches
+                                        //!< between left/right/forward/backwards)
+    double oscillation_v_eps;           //!< Threshold for the average normalized linear
+                                        //!< velocity: if oscillation_v_eps and
+                                        //!< oscillation_omega_eps are not exceeded both,
+                                        //!< a possible oscillation is detected
     double
-        oscillation_omega_eps; //!< Threshold for the average normalized angular
-                               //!< velocity: if oscillation_v_eps and
-                               //!< oscillation_omega_eps are not exceeded both,
-                               //!< a possible oscillation is detected
+        oscillation_omega_eps;                //!< Threshold for the average normalized angular
+                                              //!< velocity: if oscillation_v_eps and
+                                              //!< oscillation_omega_eps are not exceeded both,
+                                              //!< a possible oscillation is detected
     double oscillation_recovery_min_duration; //!< Minumum duration [sec] for
                                               //!< which the recovery mode is
                                               //!< activated after an
                                               //!< oscillation is detected.
-    double oscillation_filter_duration; //!< Filter length/duration [sec] for
-                                        //!< the detection of oscillations
-  } recovery; //!< Parameters related to recovery and backup strategies
+    double oscillation_filter_duration;       //!< Filter length/duration [sec] for
+                                              //!< the detection of oscillations
+  } recovery;                                 //!< Parameters related to recovery and backup strategies
 
   //! Sensor related parameters
   struct Sensor {
-    std::string laser_topic;     //!< Topic name of the laser scan
-    double fov_min_angle;        //!< Minimum angle of the laser FOV (radians)
-    double fov_max_angle;        //!< Maximum angle of the laser FOV (radians)
-    double obstacle_memory_time; //!< Time to remember obstacles outside FOV
-                                 //!< (seconds)
+    std::string laser_topic;           //!< Topic name of the laser scan
+    double fov_min_angle;              //!< Minimum angle of the laser FOV (radians)
+    double fov_max_angle;              //!< Maximum angle of the laser FOV (radians)
+    double obstacle_memory_time;       //!< Time to remember obstacles outside FOV
+                                       //!< (seconds)
     double cluster_distance_threshold; //!< Distance threshold for point
                                        //!< clustering (meters)
-    int cluster_min_points; //!< Minimum number of points to form a cluster
-    int downsample_factor;  //!< Downsampling factor for laser points (1 = no
-                            //!< downsampling)
-    double local_map_size;  //!< Local map size for filtering laser points (meters)
-  } sensor;                 //!< Sensor related parameters
+    int cluster_min_points;            //!< Minimum number of points to form a cluster
+    int downsample_factor;             //!< Downsampling factor for laser points (1 = no
+                                       //!< downsampling)
+    double local_map_size;             //!< Local map size for filtering laser points (meters)
+  } sensor;                            //!< Sensor related parameters
 
   /**
    * @brief Construct the TebConfig using default values.
@@ -524,17 +526,17 @@ public:
     optim.weight_kinematics_nh = 1000;
     optim.weight_kinematics_forward_drive = 1;
     optim.weight_kinematics_turning_radius = 1;
-    optim.weight_optimaltime = 1;
-    optim.weight_shortest_path = 0;
+    optim.weight_optimaltime = 10.0;
+    optim.weight_shortest_path = 50;
     optim.weight_obstacle = 50;
     optim.weight_inflation = 0.1;
     optim.weight_dynamic_obstacle = 50;
     optim.weight_dynamic_obstacle_inflation = 0.1;
-    optim.weight_viapoint = 1;
+    optim.weight_viapoint = 1000;
     optim.weight_prefer_rotdir = 50;
-    optim.weight_frenet_corridor = 10;
+    optim.weight_frenet_corridor = 10000;
 
-    optim.weight_adapt_factor = 2.0;
+    optim.weight_adapt_factor = 1.05;
     optim.obstacle_cost_exponent = 1.0;
 
     // Homotopy Class Planner

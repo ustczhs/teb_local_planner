@@ -1,0 +1,6 @@
+image: ../test/map.pgm
+resolution: 0.050
+origin: [-21.912, -18.035, 0.000]
+occupied_thresh: 0.650
+free_thresh: 0.196
+negate: 0
