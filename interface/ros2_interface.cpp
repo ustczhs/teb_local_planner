@@ -1,0 +1,502 @@
+#include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/point_cloud2.hpp>
+#include <sensor_msgs/msg/image.hpp>
+#include <sensor_msgs/msg/camera_info.hpp>
+#include <sensor_msgs/msg/laser_scan.hpp>
+#include <geometry_msgs/msg/transform_stamped.hpp>
+
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/filters/passthrough.h>
+#include <pcl/filters/extract_indices.h>
+#include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/common/transforms.h>
+#include <pcl/conversions.h>
+#include <pcl_conversions/pcl_conversions.h>
+#include <Eigen/Dense>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <opencv2/opencv.hpp>
+#include <memory>
+#include <vector>
+#include <array>
+#include <cmath>
+
+namespace sensor_fusion {
+
+/**
+ * @brief 高效的传感器融合节点
+ * 将3D激光雷达和深度相机数据融合为2D激光扫描
+ */
+class SensorFusionNode : public rclcpp::Node {
+public:
+  SensorFusionNode() : Node("sensor_fusion") {
+    // 初始化参数
+    initParameters();
+
+    // 初始化变换监听器
+    tf_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
+    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+
+    // 初始化发布器
+    scan_publisher_ = create_publisher<sensor_msgs::msg::LaserScan>(
+        "/scan_fused", rclcpp::QoS(10));
+
+    // 初始化订阅器
+    initSubscribers();
+
+    // 初始化数据结构
+    initDataStructures();
+
+    // 初始化角度查找表
+    initAngleTable();
+
+    RCLCPP_INFO(get_logger(), "Sensor fusion node initialized");
+    RCLCPP_INFO(get_logger(), "Local map size: %.2f m", local_map_size_);
+    RCLCPP_INFO(get_logger(), "Ground threshold: %.3f m", ground_threshold_);
+  }
+
+private:
+  // ==================== 参数配置 ====================
+  double local_map_size_;   // 局部地图大小 (m)
+  double ground_threshold_; // 地面高度阈值 (m)
+  double angle_min_;        // 扫描最小角度 (rad)
+  double angle_max_;        // 扫描最大角度 (rad)
+  double angle_increment_;  // 角度分辨率 (rad)
+  double range_min_;        // 最小测量距离 (m)
+  double range_max_;        // 最大测量距离 (m)
+  int scan_size_;           // 扫描点数量
+  std::string base_frame_;  // 基座坐标系
+
+  // 传感器配置
+  std::string lidar_3d_topic_;
+  std::string depth_topic_;
+  std::string camera_info_topic_;
+
+  // ==================== ROS2接口 ====================
+  rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr scan_publisher_;
+  rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr lidar_sub_;
+  rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr depth_sub_;
+  rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_sub_;
+
+  std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
+  std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+
+  // ==================== 数据结构 ====================
+  std::vector<float> fused_ranges_;      // 融合后的距离数据
+  std::vector<float> fused_intensities_; // 融合后的强度数据
+  std::vector<size_t> angle_to_index_;   // 角度到索引的映射表
+
+  // 点云缓冲区复用
+  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_buffer_;
+  pcl::PointCloud<pcl::PointXYZ>::Ptr transformed_cloud_;
+
+  // 深度相机参数
+  cv::Mat camera_matrix_;
+  cv::Mat distortion_coeffs_;
+  bool camera_info_received_;
+
+  // ==================== 传感器安装参数 ====================
+  // 3D激光雷达安装参数 (相对于base_link)
+  double lidar3d_x_offset_, lidar3d_y_offset_, lidar3d_z_offset_; // 位置偏移 (m)
+  double lidar3d_height_;                                         // 到地面高度 (m)
+  double lidar3d_pitch_, lidar3d_roll_, lidar3d_yaw_;             // 安装角度 (rad)
+  double lidar3d_ground_tolerance_;                               // 地面过滤容差 (m)
+
+  // 深度相机安装参数 (相对于base_link)
+  double camera_x_offset_, camera_y_offset_, camera_z_offset_; // 位置偏移 (m)
+  double camera_height_;                                       // 到地面高度 (m)
+  double camera_pitch_, camera_roll_, camera_yaw_;             // 安装角度 (rad)
+  double camera_ground_tolerance_;                             // 地面过滤容差 (m)
+
+  // ==================== 核心方法 ====================
+
+  void initParameters() {
+    // 声明参数
+    declare_parameter("local_map_size", 4.0);
+    declare_parameter("ground_threshold", 0.05);
+    declare_parameter("angle_min", -M_PI);
+    declare_parameter("angle_max", M_PI);
+    declare_parameter("angle_increment", M_PI / 180.0); // 1度分辨率
+    declare_parameter("range_min", 0.1);
+    declare_parameter("range_max", 10.0);
+    declare_parameter("base_frame", "base_link");
+
+    declare_parameter("lidar_3d_topic", "/lidar_3d/points");
+    declare_parameter("depth_topic", "/depth_camera/depth/image_raw");
+    declare_parameter("camera_info_topic", "/depth_camera/depth/camera_info");
+
+    // 3D激光雷达安装参数
+    declare_parameter("3d_lidar.x_offset", 0.0);
+    declare_parameter("3d_lidar.y_offset", 0.0);
+    declare_parameter("3d_lidar.z_offset", 0.5);
+    declare_parameter("3d_lidar.height", 0.5);
+    declare_parameter("3d_lidar.pitch", 0.0);
+    declare_parameter("3d_lidar.roll", 0.0);
+    declare_parameter("3d_lidar.yaw", 0.0);
+    declare_parameter("3d_lidar.ground_tolerance", 0.05);
+
+    // 深度相机安装参数
+    declare_parameter("camera.x_offset", 0.2);
+    declare_parameter("camera.y_offset", 0.0);
+    declare_parameter("camera.z_offset", 0.3);
+    declare_parameter("camera.height", 0.3);
+    declare_parameter("camera.pitch", 0.1);
+    declare_parameter("camera.roll", 0.0);
+    declare_parameter("camera.yaw", 0.0);
+    declare_parameter("camera.ground_tolerance", 0.03);
+
+    // 获取参数值
+    local_map_size_ = get_parameter("local_map_size").as_double();
+    ground_threshold_ = get_parameter("ground_threshold").as_double();
+    angle_min_ = get_parameter("angle_min").as_double();
+    angle_max_ = get_parameter("angle_max").as_double();
+    angle_increment_ = get_parameter("angle_increment").as_double();
+    range_min_ = get_parameter("range_min").as_double();
+    range_max_ = get_parameter("range_max").as_double();
+    base_frame_ = get_parameter("base_frame").as_string();
+
+    lidar_3d_topic_ = get_parameter("lidar_3d_topic").as_string();
+    depth_topic_ = get_parameter("depth_topic").as_string();
+    camera_info_topic_ = get_parameter("camera_info_topic").as_string();
+
+    // 获取传感器安装参数
+    lidar3d_x_offset_ = get_parameter("3d_lidar.x_offset").as_double();
+    lidar3d_y_offset_ = get_parameter("3d_lidar.y_offset").as_double();
+    lidar3d_z_offset_ = get_parameter("3d_lidar.z_offset").as_double();
+    lidar3d_height_ = get_parameter("3d_lidar.height").as_double();
+    lidar3d_pitch_ = get_parameter("3d_lidar.pitch").as_double();
+    lidar3d_roll_ = get_parameter("3d_lidar.roll").as_double();
+    lidar3d_yaw_ = get_parameter("3d_lidar.yaw").as_double();
+    lidar3d_ground_tolerance_ = get_parameter("3d_lidar.ground_tolerance").as_double();
+
+    camera_x_offset_ = get_parameter("camera.x_offset").as_double();
+    camera_y_offset_ = get_parameter("camera.y_offset").as_double();
+    camera_z_offset_ = get_parameter("camera.z_offset").as_double();
+    camera_height_ = get_parameter("camera.height").as_double();
+    camera_pitch_ = get_parameter("camera.pitch").as_double();
+    camera_roll_ = get_parameter("camera.roll").as_double();
+    camera_yaw_ = get_parameter("camera.yaw").as_double();
+    camera_ground_tolerance_ = get_parameter("camera.ground_tolerance").as_double();
+
+    // 计算扫描尺寸
+    scan_size_ = static_cast<int>((angle_max_ - angle_min_) / angle_increment_) + 1;
+  }
+
+  void initSubscribers() {
+    // 3D激光雷达订阅器
+    lidar_sub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
+        lidar_3d_topic_, rclcpp::QoS(10),
+        std::bind(&SensorFusionNode::lidarCallback, this, std::placeholders::_1));
+
+    // 深度相机订阅器
+    depth_sub_ = create_subscription<sensor_msgs::msg::Image>(
+        depth_topic_, rclcpp::QoS(10),
+        std::bind(&SensorFusionNode::depthCallback, this, std::placeholders::_1));
+
+    // 相机信息订阅器
+    camera_info_sub_ = create_subscription<sensor_msgs::msg::CameraInfo>(
+        camera_info_topic_, rclcpp::QoS(10),
+        std::bind(&SensorFusionNode::cameraInfoCallback, this, std::placeholders::_1));
+  }
+
+  void initDataStructures() {
+    // 初始化距离和强度数组
+    fused_ranges_.resize(scan_size_, std::numeric_limits<float>::infinity());
+    fused_intensities_.resize(scan_size_, 0.0f);
+
+    // 初始化点云缓冲区
+    cloud_buffer_.reset(new pcl::PointCloud<pcl::PointXYZ>());
+    transformed_cloud_.reset(new pcl::PointCloud<pcl::PointXYZ>());
+
+    camera_info_received_ = false;
+  }
+
+  void initAngleTable() {
+    // 预计算角度到索引的映射表
+    angle_to_index_.resize(360 * 10); // 0.1度分辨率
+
+    for(size_t i = 0; i < angle_to_index_.size(); ++i) {
+      double angle = i * 0.1 * M_PI / 180.0 - M_PI; // -π 到 π
+      if(angle >= angle_min_ && angle <= angle_max_) {
+        size_t index = static_cast<size_t>((angle - angle_min_) / angle_increment_);
+        if(index < static_cast<size_t>(scan_size_)) {
+          angle_to_index_[i] = index;
+        } else {
+          angle_to_index_[i] = scan_size_; // 无效索引
+        }
+      } else {
+        angle_to_index_[i] = scan_size_; // 无效索引
+      }
+    }
+  }
+
+  // ==================== 回调函数 ====================
+
+  void lidarCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
+    try {
+      // 转换ROS消息到PCL点云
+      pcl::fromROSMsg(*msg, *cloud_buffer_);
+
+      // 处理3D激光雷达数据
+      processLidar3D(msg->header.stamp);
+
+      // 发布融合结果
+      publishFusedScan(msg->header.stamp);
+
+    } catch(const std::exception& e) {
+      RCLCPP_WARN(get_logger(), "Error processing 3D lidar data: %s", e.what());
+    }
+  }
+
+  void depthCallback(const sensor_msgs::msg::Image::SharedPtr msg) {
+    if(!camera_info_received_) {
+      RCLCPP_WARN(get_logger(), "Camera info not received yet, skipping depth processing");
+      return;
+    }
+
+    try {
+      // 处理深度相机数据
+      processDepthCamera(msg->header.stamp);
+
+      // 发布融合结果
+      publishFusedScan(msg->header.stamp);
+
+    } catch(const std::exception& e) {
+      RCLCPP_WARN(get_logger(), "Error processing depth camera data: %s", e.what());
+    }
+  }
+
+  void cameraInfoCallback(const sensor_msgs::msg::CameraInfo::SharedPtr msg) {
+    // 提取相机内参
+    camera_matrix_ = cv::Mat(3, 3, CV_64F, const_cast<double*>(msg->k.data())).clone();
+    distortion_coeffs_ = cv::Mat(1, 5, CV_64F, const_cast<double*>(msg->d.data())).clone();
+
+    camera_info_received_ = true;
+    RCLCPP_INFO(get_logger(), "Camera info received and configured");
+  }
+
+  // ==================== 数据处理 ====================
+
+  void processLidar3D(const rclcpp::Time& timestamp) {
+    if(cloud_buffer_->empty()) return;
+
+    // 1. 坐标变换到base_link
+    if(!transformPointCloud(cloud_buffer_, transformed_cloud_, "lidar_3d_link", timestamp)) {
+      return;
+    }
+
+    // 2. 距离滤波 (local_map_size)
+    filterByDistance(transformed_cloud_, local_map_size_);
+
+    // 3. 地面分割 (基于几何计算)
+    removeLidar3dGroundPointsByGeometry(transformed_cloud_);
+
+    // 4. 转换为激光扫描
+    pointCloudToScan(transformed_cloud_);
+  }
+
+  void processDepthCamera(const rclcpp::Time& timestamp) {
+    // 深度图转换为点云的逻辑将在后续实现
+    // 这里先占位
+    RCLCPP_DEBUG(get_logger(), "Depth camera processing placeholder");
+  }
+
+  // ==================== 工具函数 ====================
+
+  bool transformPointCloud(pcl::PointCloud<pcl::PointXYZ>::Ptr& input_cloud,
+                           pcl::PointCloud<pcl::PointXYZ>::Ptr& output_cloud,
+                           const std::string& source_frame,
+                           const rclcpp::Time& timestamp) {
+    try {
+      // 获取变换
+      geometry_msgs::msg::TransformStamped transform_stamped =
+          tf_buffer_->lookupTransform(base_frame_, source_frame, timestamp,
+                                      rclcpp::Duration::from_seconds(0.1));
+
+      // 手动构造Eigen变换矩阵
+      Eigen::Affine3d transform = Eigen::Affine3d::Identity();
+
+      // 设置旋转部分
+      const auto& rotation = transform_stamped.transform.rotation;
+      Eigen::Quaterniond quat(rotation.w, rotation.x, rotation.y, rotation.z);
+      transform.rotate(quat);
+
+      // 设置平移部分
+      const auto& translation = transform_stamped.transform.translation;
+      transform.translation() = Eigen::Vector3d(translation.x, translation.y, translation.z);
+
+      // 应用变换
+      pcl::transformPointCloud(*input_cloud, *output_cloud, transform);
+
+      return true;
+
+    } catch(const tf2::TransformException& ex) {
+      RCLCPP_WARN(get_logger(), "Transform failed: %s", ex.what());
+      return false;
+    }
+  }
+
+  void filterByDistance(pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, double max_distance) {
+    // 使用PCL的直通滤波器
+    pcl::PassThrough<pcl::PointXYZ> pass;
+    pass.setInputCloud(cloud);
+    pass.setFilterFieldName("x");
+    pass.setFilterLimits(-max_distance, max_distance);
+    pass.filter(*cloud);
+
+    pass.setInputCloud(cloud);
+    pass.setFilterFieldName("y");
+    pass.setFilterLimits(-max_distance, max_distance);
+    pass.filter(*cloud);
+
+    pass.setInputCloud(cloud);
+    pass.setFilterFieldName("z");
+    pass.setFilterLimits(-max_distance, max_distance);
+    pass.filter(*cloud);
+  }
+
+  void removeGroundPoints(pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud) {
+    if(cloud->size() < 10) return;
+
+    // 使用RANSAC进行平面分割
+    pcl::SACSegmentation<pcl::PointXYZ> seg;
+    pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
+    pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
+
+    seg.setOptimizeCoefficients(true);
+    seg.setModelType(pcl::SACMODEL_PLANE);
+    seg.setMethodType(pcl::SAC_RANSAC);
+    seg.setMaxIterations(100);
+    seg.setDistanceThreshold(ground_threshold_);
+
+    seg.setInputCloud(cloud);
+    seg.segment(*inliers, *coefficients);
+
+    if(inliers->indices.size() == 0) {
+      RCLCPP_WARN(get_logger(), "Could not estimate a planar model for ground removal");
+      return;
+    }
+
+    // 提取非地面点
+    pcl::ExtractIndices<pcl::PointXYZ> extract;
+    extract.setInputCloud(cloud);
+    extract.setIndices(inliers);
+    extract.setNegative(true); // 保留非地面点
+    extract.filter(*cloud);
+  }
+
+  void removeLidar3dGroundPointsByGeometry(pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud) {
+    if(cloud->empty()) return;
+
+    // 基于安装参数计算地面高度
+    // 传感器安装位置: (lidar3d_x_offset_, lidar3d_y_offset_, lidar3d_z_offset_)
+    // 传感器朝向: pitch, roll, yaw
+    // 传感器到地面高度: lidar3d_height_
+
+    // 计算传感器在base_link坐标系中的位置
+    Eigen::Vector3d sensor_pos(lidar3d_x_offset_, lidar3d_y_offset_, lidar3d_z_offset_);
+
+    // 考虑传感器的俯仰角，计算地面法向量
+    // 假设地面是水平的，传感器有pitch角
+    double cos_pitch = std::cos(lidar3d_pitch_);
+    double sin_pitch = std::sin(lidar3d_pitch_);
+
+    // 地面方程: ax + by + cz + d = 0
+    // 假设地面通过传感器位置，且垂直于传感器的安装方向
+    double ground_a = -sin_pitch; // x系数
+    double ground_b = 0.0;        // y系数 (假设无roll)
+    double ground_c = cos_pitch;  // z系数
+    double ground_d = -ground_a * sensor_pos.x() - ground_b * sensor_pos.y() -
+                      ground_c * (sensor_pos.z() - lidar3d_height_);
+
+    // 过滤地面点
+    pcl::PointCloud<pcl::PointXYZ> filtered_cloud;
+    filtered_cloud.reserve(cloud->size());
+
+    for(const auto& point : cloud->points) {
+      // 计算点到地面的距离
+      double distance_to_ground = std::abs(ground_a * point.x + ground_b * point.y +
+                                           ground_c * point.z + ground_d);
+
+      // 如果距离大于容差，保留该点
+      if(distance_to_ground > lidar3d_ground_tolerance_) {
+        filtered_cloud.push_back(point);
+      }
+    }
+
+    // 更新点云
+    cloud->swap(filtered_cloud);
+  }
+
+  void removeCameraGroundPointsByGeometry(const cv::Mat& depth_image) {
+    // 深度相机地面过滤的几何计算实现
+    // 这里先占位，后续实现
+    RCLCPP_DEBUG(get_logger(), "Camera ground filtering by geometry - placeholder");
+  }
+
+  void pointCloudToScan(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud) {
+    // 重置融合数据
+    std::fill(fused_ranges_.begin(), fused_ranges_.end(),
+              std::numeric_limits<float>::infinity());
+    std::fill(fused_intensities_.begin(), fused_intensities_.end(), 0.0f);
+
+    // 将点云转换为激光扫描
+    for(const auto& point : cloud->points) {
+      // 计算距离和角度
+      double distance = std::sqrt(point.x * point.x + point.y * point.y);
+      double angle = std::atan2(point.y, point.x);
+
+      // 范围检查
+      if(distance < range_min_ || distance > range_max_ ||
+         angle < angle_min_ || angle > angle_max_) {
+        continue;
+      }
+
+      // 计算角度索引
+      size_t angle_index = static_cast<size_t>((angle - angle_min_) / angle_increment_);
+      if(angle_index >= static_cast<size_t>(scan_size_)) continue;
+
+      // 距离融合（取最小值）
+      if(distance < fused_ranges_[angle_index]) {
+        fused_ranges_[angle_index] = distance;
+        fused_intensities_[angle_index] = 1.0f; // 简化强度
+      }
+    }
+  }
+
+  void publishFusedScan(const rclcpp::Time& timestamp) {
+    auto scan_msg = std::make_unique<sensor_msgs::msg::LaserScan>();
+
+    // 设置消息头
+    scan_msg->header.stamp = timestamp;
+    scan_msg->header.frame_id = base_frame_;
+
+    // 设置扫描参数
+    scan_msg->angle_min = angle_min_;
+    scan_msg->angle_max = angle_max_;
+    scan_msg->angle_increment = angle_increment_;
+    scan_msg->range_min = range_min_;
+    scan_msg->range_max = range_max_;
+
+    // 设置距离和强度数据
+    scan_msg->ranges = fused_ranges_;
+    scan_msg->intensities = fused_intensities_;
+
+    // 发布消息
+    scan_publisher_->publish(std::move(scan_msg));
+  }
+};
+
+} // namespace sensor_fusion
+
+int main(int argc, char** argv) {
+  rclcpp::init(argc, argv);
+  auto node = std::make_shared<sensor_fusion::SensorFusionNode>();
+  rclcpp::spin(node);
+  rclcpp::shutdown();
+  return 0;
+}

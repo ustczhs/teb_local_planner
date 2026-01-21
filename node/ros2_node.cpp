@@ -195,7 +195,7 @@ private:
     current_goal_index_ = 0;
     goal_received_ = !global_path_.poses.empty();
 
-    if (goal_received_) {
+    if(goal_received_) {
       RCLCPP_INFO(this->get_logger(), "Received global path with %zu poses",
                   global_path_.poses.size());
     } else {
@@ -204,7 +204,7 @@ private:
   }
 
   void planningTimerCallback() {
-    if (!goal_received_ || global_path_.poses.empty()) {
+    if(!goal_received_ || global_path_.poses.empty()) {
       // No path to follow, stop
       geometry_msgs::msg::Twist cmd_vel;
       cmd_vel.linear.x = 0.0;
@@ -252,7 +252,7 @@ private:
     // Publish obstacles for visualization
     visualization_msgs::msg::MarkerArray marker_array;
     int marker_id = 0;
-    for (const auto& obst : obstacles) {
+    for(const auto& obst : obstacles) {
       visualization_msgs::msg::Marker marker;
       marker.header.stamp = this->now();
       marker.header.frame_id = "map";
@@ -266,7 +266,7 @@ private:
       const Eigen::Vector2d centroid_base = obst->getCentroid();
       const Eigen::Vector2d centroid_map = transformPointToMap(centroid_base);
 
-      if (dynamic_cast<PointObstacle*>(obst.get())) {
+      if(dynamic_cast<PointObstacle*>(obst.get())) {
         marker.type = visualization_msgs::msg::Marker::SPHERE;
         marker.pose.position.x = centroid_map[0];
         marker.pose.position.y = centroid_map[1];
@@ -275,7 +275,7 @@ private:
         marker.scale.x = 0.1;
         marker.scale.y = 0.1;
         marker.scale.z = 0.1;
-      } else if (auto* circ_obst = dynamic_cast<CircularObstacle*>(obst.get())) {
+      } else if(auto* circ_obst = dynamic_cast<CircularObstacle*>(obst.get())) {
         marker.type = visualization_msgs::msg::Marker::CYLINDER;
         marker.pose.position.x = centroid_map[0];
         marker.pose.position.y = centroid_map[1];
@@ -285,7 +285,7 @@ private:
         marker.scale.x = radius * 2;
         marker.scale.y = radius * 2;
         marker.scale.z = 0.1;
-      } else if (auto* line_obst = dynamic_cast<LineObstacle*>(obst.get())) {
+      } else if(auto* line_obst = dynamic_cast<LineObstacle*>(obst.get())) {
         marker.type = visualization_msgs::msg::Marker::LINE_STRIP;
         marker.pose.orientation.w = 1.0;
         marker.scale.x = 0.05;
@@ -300,11 +300,11 @@ private:
         p2.z = 0.0;
         marker.points.push_back(p1);
         marker.points.push_back(p2);
-      } else if (auto* poly_obst = dynamic_cast<PolygonObstacle*>(obst.get())) {
+      } else if(auto* poly_obst = dynamic_cast<PolygonObstacle*>(obst.get())) {
         marker.type = visualization_msgs::msg::Marker::LINE_STRIP;
         marker.pose.orientation.w = 1.0;
         marker.scale.x = 0.05;
-        for (const auto& vertex : poly_obst->vertices()) {
+        for(const auto& vertex : poly_obst->vertices()) {
           const Eigen::Vector2d vertex_map = transformPointToMap(vertex);
           geometry_msgs::msg::Point p;
           p.x = vertex_map.x();
@@ -313,7 +313,7 @@ private:
           marker.points.push_back(p);
         }
         // Close the polygon
-        if (!poly_obst->vertices().empty()) {
+        if(!poly_obst->vertices().empty()) {
           const Eigen::Vector2d vertex_map = transformPointToMap(poly_obst->vertices().front());
           geometry_msgs::msg::Point p;
           p.x = vertex_map.x();
@@ -364,7 +364,7 @@ private:
       nav_msgs::msg::Path path_msg;
       path_msg.header.stamp = this->now();
       path_msg.header.frame_id = "map"; // Assuming odom frame for world coordinates
-      for (const auto &point : trajectory) {
+      for(const auto& point : trajectory) {
         geometry_msgs::msg::PoseStamped pose;
         pose.header = path_msg.header;
         pose.pose.position.x = point[0];
@@ -382,9 +382,9 @@ private:
       RCLCPP_DEBUG(this->get_logger(), "Published local plan with %zu poses",
                    path_msg.poses.size());
 
-      if (!trajectory.empty()) {
+      if(!trajectory.empty()) {
         // Extract velocity from trajectory start
-        const auto &current_point = trajectory[0];
+        const auto& current_point = trajectory[0];
         geometry_msgs::msg::Twist cmd_vel;
 
         // Linear velocity (forward/backward)
@@ -415,7 +415,7 @@ private:
         cmd_vel_pub_->publish(cmd_vel);
       }
 
-    } catch (const std::exception &e) {
+    } catch(const std::exception& e) {
       RCLCPP_ERROR(this->get_logger(), "Planning failed: %s", e.what());
       // Stop on planning failure
       geometry_msgs::msg::Twist cmd_vel;
@@ -457,18 +457,18 @@ private:
     z_field.count = 1;
 
     cloud_msg.fields = {x_field, y_field, z_field};
-    cloud_msg.point_step = 12;  // 3 * 4 bytes
+    cloud_msg.point_step = 12; // 3 * 4 bytes
     cloud_msg.row_step = cloud_msg.point_step * cloud_msg.width;
 
     // Fill data
     cloud_msg.data.resize(cloud_msg.row_step * cloud_msg.height);
     uint8_t* data_ptr = cloud_msg.data.data();
 
-    for (size_t i = 0; i < points.size(); ++i) {
+    for(size_t i = 0; i < points.size(); ++i) {
       float* point_ptr = reinterpret_cast<float*>(data_ptr + i * cloud_msg.point_step);
-      point_ptr[0] = static_cast<float>(points[i].x());  // x
-      point_ptr[1] = static_cast<float>(points[i].y());  // y
-      point_ptr[2] = 0.0f;  // z
+      point_ptr[0] = static_cast<float>(points[i].x()); // x
+      point_ptr[1] = static_cast<float>(points[i].y()); // y
+      point_ptr[2] = 0.0f;                              // z
     }
 
     publisher->publish(cloud_msg);
@@ -483,30 +483,30 @@ private:
     std::vector<std::vector<Eigen::Vector2d>> clusters;
     std::vector<bool> visited(points.size(), false);
 
-    for (size_t i = 0; i < points.size(); ++i) {
-      if (visited[i]) continue;
+    for(size_t i = 0; i < points.size(); ++i) {
+      if(visited[i]) continue;
 
       std::vector<Eigen::Vector2d> cluster;
       std::vector<size_t> seeds = {i};
       visited[i] = true;
 
-      while (!seeds.empty()) {
+      while(!seeds.empty()) {
         size_t seed_idx = seeds.back();
         seeds.pop_back();
         cluster.push_back(points[seed_idx]);
 
-        for (size_t j = 0; j < points.size(); ++j) {
-          if (visited[j]) continue;
+        for(size_t j = 0; j < points.size(); ++j) {
+          if(visited[j]) continue;
 
           double distance = (points[j] - points[seed_idx]).norm();
-          if (distance <= CLUSTER_DISTANCE) {
+          if(distance <= CLUSTER_DISTANCE) {
             visited[j] = true;
             seeds.push_back(j);
           }
         }
       }
 
-      if (static_cast<int>(cluster.size()) >= MIN_POINTS) {
+      if(static_cast<int>(cluster.size()) >= MIN_POINTS) {
         clusters.push_back(cluster);
       }
     }
@@ -519,19 +519,19 @@ private:
     visualization_msgs::msg::MarkerArray marker_array;
     int marker_id = 0;
 
-    for (const auto& cluster : clusters) {
-      if (cluster.empty()) continue;
+    for(const auto& cluster : clusters) {
+      if(cluster.empty()) continue;
 
       // Calculate cluster centroid
       Eigen::Vector2d centroid(0, 0);
-      for (const auto& point : cluster) {
+      for(const auto& point : cluster) {
         centroid += point;
       }
       centroid /= cluster.size();
 
       // Calculate cluster radius
       double max_radius = 0.0;
-      for (const auto& point : cluster) {
+      for(const auto& point : cluster) {
         double dist = (point - centroid).norm();
         max_radius = std::max(max_radius, dist);
       }
@@ -570,16 +570,16 @@ private:
     size_t goal_index = current_goal_index_;
 
     // Start from current goal index and find point within lookahead distance
-    for (size_t i = current_goal_index_; i < global_path_.poses.size() - 1;
-         ++i) {
-      const auto &current_point = global_path_.poses[i].pose.position;
-      const auto &next_point = global_path_.poses[i + 1].pose.position;
+    for(size_t i = current_goal_index_; i < global_path_.poses.size() - 1;
+        ++i) {
+      const auto& current_point = global_path_.poses[i].pose.position;
+      const auto& next_point = global_path_.poses[i + 1].pose.position;
 
       double dx = next_point.x - current_point.x;
       double dy = next_point.y - current_point.y;
       double segment_length = std::sqrt(dx * dx + dy * dy);
 
-      if (accumulated_distance + segment_length >= LOOKAHEAD_DISTANCE) {
+      if(accumulated_distance + segment_length >= LOOKAHEAD_DISTANCE) {
         // Interpolate point at lookahead distance
         double remaining_distance = LOOKAHEAD_DISTANCE - accumulated_distance;
         double ratio = remaining_distance / segment_length;
@@ -606,7 +606,7 @@ private:
     }
 
     // If we reach the end of the path, use the final point
-    const auto &final_pose = global_path_.poses.back().pose;
+    const auto& final_pose = global_path_.poses.back().pose;
     PoseSE2 goal;
     goal.x() = final_pose.position.x;
     goal.y() = final_pose.position.y;
@@ -625,7 +625,7 @@ private:
   }
 };
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
   rclcpp::init(argc, argv);
   rclcpp::spin(std::make_shared<TebRos2Node>());
   rclcpp::shutdown();
