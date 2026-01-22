@@ -131,7 +131,15 @@ if(ENABLE_ROS2_NODE)
     find_package(tf2 REQUIRED)
     find_package(tf2_geometry_msgs REQUIRED)
     find_package(visualization_msgs REQUIRED)
-    
+
+    # 查找PCL库（用于传感器融合）
+    find_package(PCL REQUIRED)
+    find_package(pcl_conversions REQUIRED)
+    include_directories(${PCL_INCLUDE_DIRS})
+    link_directories(${PCL_LIBRARY_DIRS})
+    add_definitions(${PCL_DEFINITIONS})
+
+    # TEB ROS2节点
     add_executable(teb_ros2_node node/ros2_node.cpp)
     ament_target_dependencies(teb_ros2_node
         rclcpp
@@ -151,7 +159,29 @@ if(ENABLE_ROS2_NODE)
         fmt::fmt
         yaml-cpp
     )
-    install(TARGETS teb_ros2_node
+
+    # 传感器融合节点
+    add_executable(sensor_fusion_node interface/ros2_interface.cpp)
+    ament_target_dependencies(sensor_fusion_node
+        rclcpp
+        sensor_msgs
+        geometry_msgs
+        tf2
+        tf2_geometry_msgs
+        pcl_conversions
+    )
+    target_link_libraries(sensor_fusion_node
+        ${PCL_LIBRARIES}
+        ${OpenCV_LIBS}
+        ${Boost_LIBRARIES}
+        yaml-cpp
+    )
+
+    # 安装目标
+    install(TARGETS teb_ros2_node sensor_fusion_node
         DESTINATION lib/${PROJECT_NAME}
     )
+
+    # ROS2包配置暂时注释
+    # ament_package()
 endif()
