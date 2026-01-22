@@ -1,7 +1,6 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
-#include <sensor_msgs/msg/image.hpp>
-#include <sensor_msgs/msg/camera_info.hpp>
+
 #include <sensor_msgs/msg/laser_scan.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 
@@ -19,7 +18,7 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
-#include <opencv2/opencv.hpp>
+
 #include <memory>
 #include <vector>
 #include <array>
@@ -54,6 +53,9 @@ public:
     // 初始化角度查找表
     initAngleTable();
 
+    // 初始化融合定时器
+    initFusionTimer();
+
     RCLCPP_INFO(get_logger(), "Sensor fusion node initialized");
     RCLCPP_INFO(get_logger(), "Local map size: %.2f m", local_map_size_);
     RCLCPP_INFO(get_logger(), "Ground threshold: %.3f m", ground_threshold_);
@@ -76,11 +78,14 @@ private:
   std::string depth_topic_;
   std::string camera_info_topic_;
 
+  // 传感器坐标系
+  std::string lidar_3d_frame_;     // 3D激光雷达坐标系
+  std::string depth_camera_frame_; // 深度相机坐标系
+
   // ==================== ROS2接口 ====================
   rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr scan_publisher_;
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr lidar_sub_;
-  rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr depth_sub_;
-  rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_sub_;
+  rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr depth_sub_;
 
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
@@ -94,10 +99,15 @@ private:
   pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_buffer_;
   pcl::PointCloud<pcl::PointXYZ>::Ptr transformed_cloud_;
 
-  // 深度相机参数
-  cv::Mat camera_matrix_;
-  cv::Mat distortion_coeffs_;
-  bool camera_info_received_;
+  // 传感器数据缓冲区（用于融合）
+  pcl::PointCloud<pcl::PointXYZ>::Ptr lidar_processed_cloud_;
+  pcl::PointCloud<pcl::PointXYZ>::Ptr camera_processed_cloud_;
+  rclcpp::Time lidar_last_update_;
+  rclcpp::Time camera_last_update_;
+  double fusion_timeout_; // 融合超时时间
+
+  // 融合定时器
+  rclcpp::TimerBase::SharedPtr fusion_timer_;
 
   // ==================== 传感器安装参数 ====================
   // 3D激光雷达安装参数 (相对于base_link)
@@ -126,8 +136,12 @@ private:
     declare_parameter("base_frame", "base_link");
 
     declare_parameter("lidar_3d_topic", "/lidar_3d/points");
-    declare_parameter("depth_topic", "/depth_camera/depth/image_raw");
+    declare_parameter("depth_topic", "/oakd/rgb/preview/depth/points");
     declare_parameter("camera_info_topic", "/depth_camera/depth/camera_info");
+
+    declare_parameter("lidar_3d_frame", "lidar_3d_link");
+    declare_parameter("depth_camera_frame", "turtlebot4/oakd_rgb_camera_frame/rgbd_camera");
+    declare_parameter("fusion_timeout", 0.5); // 融合超时时间 (秒)
 
     // 3D激光雷达安装参数
     declare_parameter("3d_lidar.x_offset", 0.0);
@@ -140,14 +154,14 @@ private:
     declare_parameter("3d_lidar.ground_tolerance", 0.05);
 
     // 深度相机安装参数
-    declare_parameter("camera.x_offset", 0.2);
+    declare_parameter("camera.x_offset", -0.06);
     declare_parameter("camera.y_offset", 0.0);
-    declare_parameter("camera.z_offset", 0.3);
-    declare_parameter("camera.height", 0.3);
-    declare_parameter("camera.pitch", 0.1);
+    declare_parameter("camera.z_offset", 0.244);
+    declare_parameter("camera.height", 0.324);
+    declare_parameter("camera.pitch", 0.0);
     declare_parameter("camera.roll", 0.0);
     declare_parameter("camera.yaw", 0.0);
-    declare_parameter("camera.ground_tolerance", 0.03);
+    declare_parameter("camera.ground_tolerance", 0.1);
 
     // 获取参数值
     local_map_size_ = get_parameter("local_map_size").as_double();
@@ -162,6 +176,9 @@ private:
     lidar_3d_topic_ = get_parameter("lidar_3d_topic").as_string();
     depth_topic_ = get_parameter("depth_topic").as_string();
     camera_info_topic_ = get_parameter("camera_info_topic").as_string();
+
+    lidar_3d_frame_ = get_parameter("lidar_3d_frame").as_string();
+    depth_camera_frame_ = get_parameter("depth_camera_frame").as_string();
 
     // 获取传感器安装参数
     lidar3d_x_offset_ = get_parameter("3d_lidar.x_offset").as_double();
@@ -193,14 +210,9 @@ private:
         std::bind(&SensorFusionNode::lidarCallback, this, std::placeholders::_1));
 
     // 深度相机订阅器
-    depth_sub_ = create_subscription<sensor_msgs::msg::Image>(
+    depth_sub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
         depth_topic_, rclcpp::QoS(10),
         std::bind(&SensorFusionNode::depthCallback, this, std::placeholders::_1));
-
-    // 相机信息订阅器
-    camera_info_sub_ = create_subscription<sensor_msgs::msg::CameraInfo>(
-        camera_info_topic_, rclcpp::QoS(10),
-        std::bind(&SensorFusionNode::cameraInfoCallback, this, std::placeholders::_1));
   }
 
   void initDataStructures() {
@@ -212,7 +224,16 @@ private:
     cloud_buffer_.reset(new pcl::PointCloud<pcl::PointXYZ>());
     transformed_cloud_.reset(new pcl::PointCloud<pcl::PointXYZ>());
 
-    camera_info_received_ = false;
+    // 初始化传感器数据缓冲区
+    lidar_processed_cloud_.reset(new pcl::PointCloud<pcl::PointXYZ>());
+    camera_processed_cloud_.reset(new pcl::PointCloud<pcl::PointXYZ>());
+  }
+
+  void initFusionTimer() {
+    // 创建10Hz融合定时器
+    fusion_timer_ = create_wall_timer(
+        std::chrono::milliseconds(100),
+        std::bind(&SensorFusionNode::fusionTimerCallback, this));
   }
 
   void initAngleTable() {
@@ -241,69 +262,41 @@ private:
       // 转换ROS消息到PCL点云
       pcl::fromROSMsg(*msg, *cloud_buffer_);
 
-      // 处理3D激光雷达数据
-      processLidar3D(msg->header.stamp);
+      // 1. 在传感器坐标系下预滤波（减少计算量）
+      filterByDistance(cloud_buffer_, local_map_size_);
 
-      // 发布融合结果
-      publishFusedScan(msg->header.stamp);
+      // 2. 坐标变换到base_link
+      if(transformPointCloud(cloud_buffer_, transformed_cloud_, lidar_3d_frame_, msg->header.stamp)) {
+        lidar_processed_cloud_ = transformed_cloud_->makeShared();
+        lidar_last_update_ = msg->header.stamp;
+      }
 
     } catch(const std::exception& e) {
       RCLCPP_WARN(get_logger(), "Error processing 3D lidar data: %s", e.what());
     }
   }
 
-  void depthCallback(const sensor_msgs::msg::Image::SharedPtr msg) {
-    if(!camera_info_received_) {
-      RCLCPP_WARN(get_logger(), "Camera info not received yet, skipping depth processing");
-      return;
-    }
-
+  void depthCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
     try {
-      // 处理深度相机数据
-      processDepthCamera(msg->header.stamp);
+      // 转换ROS消息到PCL点云
+      pcl::fromROSMsg(*msg, *cloud_buffer_);
 
-      // 发布融合结果
-      publishFusedScan(msg->header.stamp);
+      // 1. 在传感器坐标系下预滤波（减少计算量）
+      filterByDistance(cloud_buffer_, local_map_size_);
+
+      // 2. 坐标变换到base_link
+      if(transformPointCloud(cloud_buffer_, transformed_cloud_, depth_camera_frame_, msg->header.stamp)) {
+        camera_processed_cloud_ = transformed_cloud_->makeShared();
+        camera_last_update_ = msg->header.stamp;
+      }
 
     } catch(const std::exception& e) {
       RCLCPP_WARN(get_logger(), "Error processing depth camera data: %s", e.what());
     }
   }
 
-  void cameraInfoCallback(const sensor_msgs::msg::CameraInfo::SharedPtr msg) {
-    // 提取相机内参
-    camera_matrix_ = cv::Mat(3, 3, CV_64F, const_cast<double*>(msg->k.data())).clone();
-    distortion_coeffs_ = cv::Mat(1, 5, CV_64F, const_cast<double*>(msg->d.data())).clone();
-
-    camera_info_received_ = true;
-    RCLCPP_INFO(get_logger(), "Camera info received and configured");
-  }
-
   // ==================== 数据处理 ====================
-
-  void processLidar3D(const rclcpp::Time& timestamp) {
-    if(cloud_buffer_->empty()) return;
-
-    // 1. 坐标变换到base_link
-    if(!transformPointCloud(cloud_buffer_, transformed_cloud_, "lidar_3d_link", timestamp)) {
-      return;
-    }
-
-    // 2. 距离滤波 (local_map_size)
-    filterByDistance(transformed_cloud_, local_map_size_);
-
-    // 3. 地面分割 (基于几何计算)
-    removeLidar3dGroundPointsByGeometry(transformed_cloud_);
-
-    // 4. 转换为激光扫描
-    pointCloudToScan(transformed_cloud_);
-  }
-
-  void processDepthCamera(const rclcpp::Time& timestamp) {
-    // 深度图转换为点云的逻辑将在后续实现
-    // 这里先占位
-    RCLCPP_DEBUG(get_logger(), "Depth camera processing placeholder");
-  }
+  // （已移除独立的processLidar3D和processDepthCamera函数，现在在回调中直接处理）
 
   // ==================== 工具函数 ====================
 
@@ -359,85 +352,6 @@ private:
     pass.filter(*cloud);
   }
 
-  void removeGroundPoints(pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud) {
-    if(cloud->size() < 10) return;
-
-    // 使用RANSAC进行平面分割
-    pcl::SACSegmentation<pcl::PointXYZ> seg;
-    pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
-    pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
-
-    seg.setOptimizeCoefficients(true);
-    seg.setModelType(pcl::SACMODEL_PLANE);
-    seg.setMethodType(pcl::SAC_RANSAC);
-    seg.setMaxIterations(100);
-    seg.setDistanceThreshold(ground_threshold_);
-
-    seg.setInputCloud(cloud);
-    seg.segment(*inliers, *coefficients);
-
-    if(inliers->indices.size() == 0) {
-      RCLCPP_WARN(get_logger(), "Could not estimate a planar model for ground removal");
-      return;
-    }
-
-    // 提取非地面点
-    pcl::ExtractIndices<pcl::PointXYZ> extract;
-    extract.setInputCloud(cloud);
-    extract.setIndices(inliers);
-    extract.setNegative(true); // 保留非地面点
-    extract.filter(*cloud);
-  }
-
-  void removeLidar3dGroundPointsByGeometry(pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud) {
-    if(cloud->empty()) return;
-
-    // 基于安装参数计算地面高度
-    // 传感器安装位置: (lidar3d_x_offset_, lidar3d_y_offset_, lidar3d_z_offset_)
-    // 传感器朝向: pitch, roll, yaw
-    // 传感器到地面高度: lidar3d_height_
-
-    // 计算传感器在base_link坐标系中的位置
-    Eigen::Vector3d sensor_pos(lidar3d_x_offset_, lidar3d_y_offset_, lidar3d_z_offset_);
-
-    // 考虑传感器的俯仰角，计算地面法向量
-    // 假设地面是水平的，传感器有pitch角
-    double cos_pitch = std::cos(lidar3d_pitch_);
-    double sin_pitch = std::sin(lidar3d_pitch_);
-
-    // 地面方程: ax + by + cz + d = 0
-    // 假设地面通过传感器位置，且垂直于传感器的安装方向
-    double ground_a = -sin_pitch; // x系数
-    double ground_b = 0.0;        // y系数 (假设无roll)
-    double ground_c = cos_pitch;  // z系数
-    double ground_d = -ground_a * sensor_pos.x() - ground_b * sensor_pos.y() -
-                      ground_c * (sensor_pos.z() - lidar3d_height_);
-
-    // 过滤地面点
-    pcl::PointCloud<pcl::PointXYZ> filtered_cloud;
-    filtered_cloud.reserve(cloud->size());
-
-    for(const auto& point : cloud->points) {
-      // 计算点到地面的距离
-      double distance_to_ground = std::abs(ground_a * point.x + ground_b * point.y +
-                                           ground_c * point.z + ground_d);
-
-      // 如果距离大于容差，保留该点
-      if(distance_to_ground > lidar3d_ground_tolerance_) {
-        filtered_cloud.push_back(point);
-      }
-    }
-
-    // 更新点云
-    cloud->swap(filtered_cloud);
-  }
-
-  void removeCameraGroundPointsByGeometry(const cv::Mat& depth_image) {
-    // 深度相机地面过滤的几何计算实现
-    // 这里先占位，后续实现
-    RCLCPP_DEBUG(get_logger(), "Camera ground filtering by geometry - placeholder");
-  }
-
   void pointCloudToScan(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud) {
     // 重置融合数据
     std::fill(fused_ranges_.begin(), fused_ranges_.end(),
@@ -466,15 +380,13 @@ private:
         fused_intensities_[angle_index] = 1.0f; // 简化强度
       }
     }
-  }
-
-  void publishFusedScan(const rclcpp::Time& timestamp) {
+    // std::cout << "pointCloudToScan done, fused_ranges_ size: " << fused_ranges_.size() << std::endl;
     auto scan_msg = std::make_unique<sensor_msgs::msg::LaserScan>();
 
     // 设置消息头
-    scan_msg->header.stamp = timestamp;
+    scan_msg->header.stamp = rclcpp::Time(cloud->header.stamp);
     scan_msg->header.frame_id = base_frame_;
-
+    // scan_msg->header.frame_id = "turtlebot4/rplidar_link/rplidar";
     // 设置扫描参数
     scan_msg->angle_min = angle_min_;
     scan_msg->angle_max = angle_max_;
@@ -488,6 +400,54 @@ private:
 
     // 发布消息
     scan_publisher_->publish(std::move(scan_msg));
+  }
+
+  void fusionTimerCallback() {
+    // 检查是否有有效数据
+    bool has_lidar = !lidar_processed_cloud_->empty();
+    bool has_camera = !camera_processed_cloud_->empty();
+
+    // 如果没有任何有效数据，不发布
+    if(!has_lidar && !has_camera) return;
+
+    // 3. 融合点云数据
+    pcl::PointCloud<pcl::PointXYZ> fused_cloud;
+    if(has_lidar) {
+      fused_cloud += *lidar_processed_cloud_;
+    }
+    if(has_camera) {
+      fused_cloud += *camera_processed_cloud_;
+    }
+
+    // 4. 统一地面分割（在base_link坐标系下）
+    removeGroundPointsByGeometry(fused_cloud);
+
+    // 5. 转换为激光扫描并发布
+    if(!fused_cloud.empty()) {
+      auto fused_cloud_ptr = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>(fused_cloud);
+      pointCloudToScan(fused_cloud_ptr);
+    }
+  }
+
+  // 统一的地面过滤函数
+  void removeGroundPointsByGeometry(pcl::PointCloud<pcl::PointXYZ>& cloud) {
+    if(cloud.empty()) return;
+
+    // 简化的地面模型：假设水平地面，z = 0
+    // 可以根据需要扩展为更复杂的地面模型
+    const double ground_z_threshold = 0.05; // 5cm地面容差
+
+    pcl::PointCloud<pcl::PointXYZ> filtered_cloud;
+    filtered_cloud.reserve(cloud.size());
+
+    for(const auto& point : cloud) {
+      // 简化的地面过滤：保留z值大于阈值的点
+      if(point.z > ground_z_threshold) {
+        filtered_cloud.push_back(point);
+      }
+    }
+
+    cloud.swap(filtered_cloud);
   }
 };
 
