@@ -174,6 +174,7 @@ if(ENABLE_ROS2_NODE)
         ${PCL_LIBRARIES}
         ${OpenCV_LIBS}
         ${Boost_LIBRARIES}
+        yaml-cpp
     )
 
     # 安装目标

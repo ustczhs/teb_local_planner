@@ -78,6 +78,9 @@ frenet_corridor:
 # ==============================================================================
 sensor:
   laser_topic: "/scan"           # 激光雷达话题
+  2d_laser_install_angle: -1.57079633  # 2D激光雷达安装角度 (弧度，-90度)
+  2d_laser_x_offset: -0.040      # 2D激光雷达x方向偏移 (米)
+  2d_laser_y_offset: 0.000       # 2D激光雷达y方向偏移 (米)
   fov_min_angle: -1.745          # FOV最小角度 (-100度)
   fov_max_angle: 1.745           # FOV最大角度 (+100度)
   obstacle_memory_time: 3.0      # FOV外障碍物记忆时间 (秒)
@@ -107,4 +110,4 @@ visualization:
   show_corridor_boundaries: true  
   show_obstacles: true           
   show_trajectory: true          
-  scale_factor: 50.0             
+  scale_factor: 50.0
