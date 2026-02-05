@@ -546,6 +546,9 @@ namespace teb_local_planner
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     };
 
+//! Abbrev. for shared circular obstacle pointers
+typedef boost::shared_ptr<CircularObstacle> CircularObstaclePtr;
+
 /**
 * @class LineObstacle
 * @brief Implements a 2D line obstacle
@@ -1023,7 +1026,7 @@ namespace teb_local_planner
           */
         void pushBackVertex(double x, double y)
         {
-            vertices_.push_back(Eigen::Vector2d(x,y));
+            vertices_.emplace_back(x, y);
             finalized_ = false;
         }
 

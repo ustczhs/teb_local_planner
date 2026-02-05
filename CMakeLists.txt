@@ -7,8 +7,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/cmake_modules)
 
 # ROS node compilation options - ROS1 Noetic 环境 正确配置
-option(ENABLE_ROS1_NODE "Enable ROS1 node compilation" ON)
-option(ENABLE_ROS2_NODE "Enable ROS2 node compilation" OFF)
+option(ENABLE_ROS1_NODE "Enable ROS1 node compilation" OFF)
+option(ENABLE_ROS2_NODE "Enable ROS2 node compilation" ON)
 
 # 基础必装依赖 (所有环境通用)
 find_package(Boost REQUIRED COMPONENTS system thread graph)
@@ -60,6 +60,7 @@ add_library(lib_teb
         src/frenet_reference.cpp
         src/config_loader.cpp
         src/sensor_proc.cpp
+        src/teb_planner_core.cpp
 )
 
 # 链接核心库依赖

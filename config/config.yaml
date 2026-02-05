@@ -1,110 +1,151 @@
-# TEB Local Planner Configuration
-# 重点优化：绕障后快速回归主线
+teb_local_planner:
+  parameters:
+    # ==============================================================================
+    # 基础参数
+    # ==============================================================================
+    planning_frequency: 20.0              # 规划频率 (Hz)
+    config_file: "../config/config.yaml"   # 配置文件路径
 
-# ==============================================================================
-# 机器人配置（提升转向/速度恢复能力）
-# ==============================================================================
-robot:
-  type: "differential_drive"
-  # 适度提升前进速度上限（绕障后快速回归），保留角速度灵活性
-  max_vel_x: 0.12          
-  max_vel_x_backwards: 0.2  
-  max_vel_y: 0.0          
-  max_vel_theta: 0.9       # 进一步提升角速度，加快转向回归主线
+    # ==============================================================================
+    # ROS话题配置
+    # ==============================================================================
+    topics:
+      # 订阅话题
+      laser_topic: "/scan"                 # 激光雷达话题
+      odom_topic: "/odometry/filtered"     # 里程计话题
+      pose_topic: "/current_pose"          # 位姿话题
+      amcl_pose_topic: "/amcl_pose"        # AMCL位姿话题
+      global_path_topic: "/plan"           # 全局路径话题
 
-  # 加速度限制：放宽纵向加速度，让速度快速恢复
-  acc_lim_x: 1.2          
-  acc_lim_y: 0.5          
-  acc_lim_theta: 1.0      
+      # 发布话题
+      cmd_vel_topic: "/cmd_vel1"           # 速度命令话题
+      aim_pose_topic: "/aim_pose"          # 目标点话题
+      local_plan_topic: "/local_plan_teb"  # 局部规划路径话题
+      modified_path_topic: "modified_global_path"  # 修改后的全局路径话题
+      obstacles_marker_topic: "/obstacles_marker"  # 障碍物可视化话题
+      obstacles_points_topic: "/obstacles_points"   # 障碍物点云话题
+      obstacles_clusters_marker_topic: "/obstacles_clusters_marker"  # 障碍物聚类可视化话题
 
-  min_turning_radius: 0.2  
-  wheelbase: 0.5          
-  cmd_angle_instead_rotvel: false  
 
-  footprint:
-    type: "circle"        
-    radius: 0.2          
-    vertices: [[0.2,0], [0.1,0.1], [-0.1,0.1], [-0.1,-0.1], [0.1,-0.1]]
+      # 路径边界话题
+      path_boundary_left_topic: "/path_boundary/left"       # 左边界话题
+      path_boundary_right_topic: "/path_boundary/right"     # 右边界话题
+      path_boundary_viz_topic: "/path_boundary/visualization"  # 边界可视化话题
 
-# ==============================================================================
-# 轨迹规划配置（加快轨迹收敛）
-# ==============================================================================
-trajectory:
-  dt_ref: 0.15            # 进一步减小时间分辨率，轨迹更精细且收敛更快
-  dt_hysteresis: 0.03     # 降低滞后，快速响应主线轨迹
+    # ==============================================================================
+    # 机器人配置
+    # ==============================================================================
+    robot:
+      type: "differential_drive"
+      max_vel_x: 0.5              # 最大前进速度 (m/s) - 适当降低以提高稳定性
+      max_vel_x_backwards: 0.0    # 最大后退速度 (m/s)
+      max_vel_y: 0.0              # 最大y向速度 (m/s)，差分驱动为0
+      max_vel_theta: 0.6         # 最大角速度 (rad/s) - 提高以允许更快的转向
+      acc_lim_x: 1.0              # x向加速度限制 (m/s^2) - 降低以提高平滑度
+      acc_lim_y: 0.0              # y向加速度限制 (m/s^2)
+      acc_lim_theta: 1.5          # 角加速度限制 - 提高以允许更快的角速度变化
+      min_turning_radius: 0.0     # 最小转弯半径 (m)，差分驱动为0
+      wheelbase: 0.28              # 轮距 (m)
+      cmd_angle_instead_rotvel: false
 
-  min_samples: 5         
-  max_samples: 150        # 减少最大采样点，避免轨迹过度分散
+      footprint:
+        type: "circle"            # 足迹类型: circle 或 polygon
+        radius: 0.17              # 圆形足迹半径 (m)
+        # 多边形足迹顶点 (如果type为polygon)
+        # vertices: [[0.3,0.25], [0.3,-0.25], [-0.3,-0.25], [-0.3,0.25]]
 
-  # 触发轨迹重初始化的阈值：缩小距离/角度阈值，更快响应主线
-  force_reinit_new_goal_dist: 0.8      
-  force_reinit_new_goal_angular: 1.0  
+    # ==============================================================================
+    # 轨迹配置 - 优化为更平滑的轨迹
+    # ==============================================================================
+    trajectory:
+      dt_ref: 0.15                 # 参考时间分辨率 (s) - 增大使轨迹更平滑
+      dt_hysteresis: 0.05         # 时间滞后 (s)
+      min_samples: 5              # 最小轨迹点数
+      max_samples: 80             # 最大轨迹点数
+      force_reinit_new_goal_dist: 0.5       # 强制重初始化距离阈值 (m)
+      force_reinit_new_goal_angular: 0.785  # 强制重初始化角度阈值 (rad, 45度)
 
-# ==============================================================================
-# 优化配置（提升回归主线权重）
-# ==============================================================================
-optimization:
-  no_inner_iterations: 2   
-  no_outer_iterations: 1  
+    # ==============================================================================
+    # 优化配置 - 增强平滑度和安全性，同时优化终点接近的果断性
+    # ==============================================================================
+    optimization:
+      no_inner_iterations: 5      # 内迭代次数 - 增加以提高优化质量
+      no_outer_iterations: 3      # 外迭代次数
+      weight_max_vel_x: 2.0       # 最大速度权重
+      weight_max_vel_theta: 1.0   # 最大角速度权重
+      weight_acc_lim_x: 1.0       # 加速度限制权重 - 降低以减少平滑约束，允许更直接的运动
+      weight_acc_lim_theta: 1.0   # 角加速度限制权重
+      weight_kinematics_nh: 1000.0  # 非完整约束权重
+      weight_kinematics_forward_drive: 100.0  # 前进驱动权重 - 高值防止后退
+      weight_obstacle: 100.0       # 障碍物权重 - 降低以避免过度避障
+      weight_viapoint: 10.0      # 路径点权重 - 增加以更好地跟踪路径
+      optimization_activate: true  # 是否启用优化
+      enable_homotopy_class_planning: false  # 是否启用同伦类规划
 
-  # 核心调整：提升路径跟踪权重，降低过度避障的优先级
-  weight_max_vel_x: 1.5    # 提升速度权重，绕障后快速恢复速度
-  weight_max_vel_theta: 1  
-  weight_acc_lim_x: 1.0    # 恢复加速度权重，支持快速提速
-  weight_acc_lim_theta: 1.0  
-  weight_kinematics_nh: 1000  
-  weight_obstacle: 120     # 适度降低障碍物权重（避免过度避障）
-  weight_frenet_corridor: 40  # 大幅提升Frenet走廊权重，强制回归主线
 
-# ==============================================================================
-# 障碍物配置（避免过度远离主线）
-# ==============================================================================
-obstacles:
-  min_obstacle_dist: 0.35     # 小幅降低最小障碍物距离（保证安全的前提下）
-  inflation_dist: 0.6         # 缩小障碍物缓冲区，避免绕障过度偏离
-  obstacle_poses_affected: 15 # 减少受影响位姿数，仅关注近距离障碍物
-  obstacle_square_size: 2.5  
+    # ==============================================================================
+    # 障碍物配置 - 提高安全距离
+    # ==============================================================================
+    obstacles:
+      min_obstacle_dist: 0.1     # 最小障碍物距离 (m) - 增加安全性
+      inflation_dist: 0.1        # 障碍物膨胀距离 (m) - 必须大于min_obstacle_dist
+      obstacle_poses_affected: 15 # 受障碍物影响的位姿数
+      obstacle_square_size: 3.0   # 障碍物方形尺寸 (m)
 
-# ==============================================================================
-# Frenet走廊约束（强制收敛到主线）
-# ==============================================================================
-frenet_corridor:
-  enabled: true           
-  corridor_width: 0.8     # 缩窄走廊，限制过度偏离
-  min_corridor_width: 0.4  # 同步缩小最小走廊宽度
+    # ==============================================================================
+    # 传感器配置
+    # ==============================================================================
+    sensor:
+      laser_topic: "/scan"                    # 激光雷达话题
+      fov_min_angle: -1.57                    # FOV最小角度 (rad, -90度)
+      fov_max_angle: 1.57                     # FOV最大角度 (rad, +90度)
+      obstacle_memory_time: 2.0               # 障碍物记忆时间 (s)
+      cluster_distance_threshold: 0.2        # 聚类距离阈值 (m)
+      cluster_min_points: 3                   # 聚类最小点数
+      downsample_factor: 2                    # 降采样因子
+      local_map_size: 3.0                     # 局部地图大小 (m)
 
-# ==============================================================================
-# 传感器配置
-# ==============================================================================
-sensor:
-  laser_topic: "/scan"           # 激光雷达话题
-  fov_min_angle: -1.745          # FOV最小角度 (-100度)
-  fov_max_angle: 1.745           # FOV最大角度 (+100度)
-  obstacle_memory_time: 3.0      # FOV外障碍物记忆时间 (秒)
-  cluster_distance_threshold: 0.1  # 聚类距离阈值 (m)
-  cluster_min_points: 3          # 聚类最小点数
-  downsample_factor: 2           # 降采样因子
-  local_map_size: 4.0          # 局部地图大小 (m)
+    # ==============================================================================
+    # 目标点跟踪配置 - 改进终点处理，使接近目标时更果断
+    # ==============================================================================
+    goal_tracking:
+      goal_reached_threshold: 0.05            # 到达终点的距离阈值 (m, 5cm)
+      approach_goal_distance: 0.5              # 开始直接接近终点的距离 (m)
+      final_approach_speed: 0.1              # 最终接近速度 (m/s) - 提高以更果断
+      max_angle_diff_for_forward: 0.5         # 允许前进的最大角度偏差 (rad) - 增加到约30度，允许更大角度偏差时仍可前进
+      angle_gain: 2.0                          # 角度控制增益 - 增加以提高转向响应
+      final_angle_gain: 3.0                    # 最终角度控制增益 - 进一步增加以强化最终接近时的转向
+      speed_distance_factor: 0.5                # 速度距离因子 - 提高使速度随距离变化更明显
+      enable_direct_approach: true               # 是否启用直接接近模式
 
-# ==============================================================================
-# 测试场景配置
-# ==============================================================================
-simulation:
-  dt: 0.1                
-  robot_speed: 0.8       # 提升仿真速度，加快回归
-  lookahead_distance: 4.0  # 适度减小前瞻（避免过度关注远端障碍物）
+    # ==============================================================================
+    # 寻找下一个目标点配置
+    # ==============================================================================
+    find_next_goal:
+      lookahead_distance: 1.5                 # 前视距离 (m) - 适当减小提高响应速度
+      min_obstacle_dist: 0.1                  # 最小障碍物距离 (m)
+      max_longitudinal_expand: 20             # 最大纵向扩展次数
+      longitudinal_step_points: 100            # 每次纵向跳跃的点数
+      max_lateral_search: 5                  # 横向搜索范围
+      lateral_search_step: 1                  # 横向搜索步长
+      lateral_safety_margin: 0.02             # 横向安全裕度 (m)
+      max_expand_index_limit: 800             # 最大扩展索引限制
+      avg_segment_calc_points: 8              # 计算平均段长的点数
 
-  obstacles:
-    count: 10             
-    amplitude: 5.0       
-    frequency: 0.1       
-    phase_offset: 1.57   
-
-# ==============================================================================
-# 可视化配置
-# ==============================================================================
-visualization:
-  show_corridor_boundaries: true  
-  show_obstacles: true           
-  show_trajectory: true          
-  scale_factor: 50.0             
+    # ==============================================================================
+    # 路径边界配置
+    # ==============================================================================
+    path_boundary:
+      # 基础参数
+      enabled: true              # 是否启用路径边界
+      boundary_width: 1.0         # 单边边界宽度（米），总道路宽度为 2*boundary_width
+      point_interval: 0.05        # 边界点间隔（米）
+      
+    # ==============================================================================
+    # 边界障碍物配置
+    # ==============================================================================
+    boundary_obstacles:
+      enabled: true              # 是否启用边界障碍物
+      inflation: 0.05            # 边界障碍物膨胀距离 (m)
+      point_interval: 0.1        # 边界障碍物插值间隔 (m)
+      max_obstacle_dist: 3.0     # 边界障碍物最大考虑距离 (m)

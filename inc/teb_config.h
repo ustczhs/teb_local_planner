@@ -263,8 +263,6 @@ public:
                                    //!< specific turning direction (-> currently
                                    //!< only activated if an oscillation is
                                    //!< detected, see 'oscillation_recovery'
-    double weight_frenet_corridor; //!< Optimization weight for enforcing Frenet
-                                   //!< corridor constraints
 
     double weight_adapt_factor; //!< Some special weights (currently
                                 //!< 'weight_obstacle') are repeatedly scaled by
@@ -534,8 +532,6 @@ public:
     optim.weight_dynamic_obstacle_inflation = 0.1;
     optim.weight_viapoint = 1000;
     optim.weight_prefer_rotdir = 50;
-    optim.weight_frenet_corridor = 10000;
-
     optim.weight_adapt_factor = 1.05;
     optim.obstacle_cost_exponent = 1.0;
 

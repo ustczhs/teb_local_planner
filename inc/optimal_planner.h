@@ -26,7 +26,6 @@
 #include "frenet_reference.h"
 #include "g2o_types/edge_acceleration.h"
 #include "g2o_types/edge_dynamic_obstacle.h"
-#include "g2o_types/edge_frenet_corridor.h"
 #include "g2o_types/edge_kinematics.h"
 #include "g2o_types/edge_obstacle.h"
 #include "g2o_types/edge_prefer_rotdir.h"
@@ -292,7 +291,7 @@ public:
    * @remarks This method overrids the obstacle container optinally assigned in
    * the constructor.
    */
-  void setObstVector(ObstContainer *obst_vector) { obstacles_ = obst_vector; }
+  void setObstVector(const ObstContainer *obst_vector) { obstacles_ = const_cast<ObstContainer*>(obst_vector); }
 
   /**
    * @brief Access the internal obstacle container.
@@ -313,13 +312,6 @@ public:
   void setViaPoints(const ViaPointContainer *via_points) {
     via_points_ = via_points;
   }
-
-  /**
-   * @brief Set the Frenet reference for corridor constraints
-   * @param frenet_ref Shared pointer to FrenetReference
-   */
-  void setFrenetReference(boost::shared_ptr<FrenetReference> frenet_ref);
-
   /**
    * @brief Access the internal via-point container.
    * @return Const reference to the via-point container
@@ -766,18 +758,13 @@ protected:
   Eigen::Vector2d findNearestPointInCorridor(const Eigen::Vector2d &point) const;
   bool isPointInCorridor(const Eigen::Vector2d &point) const;
   void adjustInitialTrajectoryToCorridor();
- 
-    
-    /**
-     * @brief 判断障碍物是否在机器人当前位置的正方形范围内
-     * @param obstacle 障碍物指针
-     * @return true-在范围内，false-不在范围内
-     */
-    bool isObstacleInSquareRange(const Obstacle* obstacle) const;
+  /**
+   * @brief 判断障碍物是否在机器人当前位置的正方形范围内
+   * @param obstacle 障碍物指针
+   * @return true-在范围内，false-不在范围内
+   */
+  bool isObstacleInSquareRange(const Obstacle *obstacle) const;
 private:
-  // 用于检查障碍物是否在走廊内的工具
-  mutable std::unique_ptr<EdgeFrenetCorridor> corridor_checker_;
-
   // external objects (store weak pointers)
   const TebConfig
       *cfg_; //!< Config class that stores and manages all related parameters

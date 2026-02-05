@@ -233,9 +233,6 @@ int main() {
     for (int i = 0; i < local_rows; ++i) {
       local_path.row(i) = path_points.row(current_idx + i);
     }
-    local_frenet_ref = boost::make_shared<FrenetReference>(local_path);
-    planner->setFrenetReference(local_frenet_ref);
-
     try {
       // 规划从当前点到目标点的路径
       planner->plan(start, end);

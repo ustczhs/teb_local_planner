@@ -37,11 +37,13 @@ SensorProcessor::downsamplePoints(const std::vector<Eigen::Vector2d> &points,
 std::vector<Eigen::Vector2d> SensorProcessor::filterByLocalMapSize(
     const std::vector<Eigen::Vector2d> &points, double local_map_size) {
   std::vector<Eigen::Vector2d> filtered_points;
+  // 预分配容量，避免频繁重新分配
+  filtered_points.reserve(points.size());
 
   for (const auto &point : points) {
     double distance = point.norm();
     if (distance <= local_map_size) {
-      filtered_points.push_back(point);
+      filtered_points.emplace_back(point);
     }
   }
 
@@ -60,13 +62,16 @@ double quaternionToYaw(double qx, double qy, double qz, double qw) {
 std::vector<Eigen::Vector2d>
 SensorProcessor::convertLaserToPoints(const LaserScanData &scan_data) {
   std::vector<Eigen::Vector2d> points;
+  // 预分配容量：估计有效点数约为总点数的一半
+  points.reserve(scan_data.ranges.size());
 
   // 计算角度增量
   double angle_increment = scan_data.angle_increment;
   double angle_min = scan_data.angle_min;
 
   // turtlebot4激光雷达相对于base_link顺时针旋转90度
-  const double LASER_INSTALL_ANGLE = M_PI / 2.0; // 90度
+  // const double LASER_INSTALL_ANGLE = M_PI / 2.0; // 90度
+  const double LASER_INSTALL_ANGLE = 0.0; // 90度
 
   for (size_t i = 0; i < scan_data.ranges.size(); ++i) {
     float range = scan_data.ranges[i];
@@ -111,8 +116,7 @@ std::vector<Eigen::Vector2d> SensorProcessor::transformPointsToWorld(
 
   for (const auto &point : points_in_base) {
     // 旋转变换 + 平移
-    Eigen::Vector2d transformed_point = rotation * point + translation;
-    points_in_world.push_back(transformed_point);
+    points_in_world.emplace_back(rotation * point + translation);
   }
 
   return points_in_world;
@@ -139,8 +143,7 @@ std::vector<Eigen::Vector2d> SensorProcessor::transformPointsToBase(
 
   for (const auto &point : points_in_world) {
     // 先平移后旋转
-    Eigen::Vector2d transformed_point = rotation * (point + translation);
-    points_in_base.push_back(transformed_point);
+    points_in_base.emplace_back(rotation * (point + translation));
   }
 
   return points_in_base;
@@ -153,6 +156,9 @@ SensorProcessor::separateFOVPoints(const std::vector<Eigen::Vector2d> &points,
 
   std::vector<Eigen::Vector2d> fov_points;
   std::vector<Eigen::Vector2d> non_fov_points;
+  // 预分配容量
+  fov_points.reserve(points.size());
+  non_fov_points.reserve(points.size());
 
   for (const auto &point : points) {
     // 计算点的角度（相对于机器人前进方向）
@@ -166,9 +172,9 @@ SensorProcessor::separateFOVPoints(const std::vector<Eigen::Vector2d> &points,
 
     // 判断是否在FOV内
     if (angle >= fov_min_angle && angle <= fov_max_angle) {
-      fov_points.push_back(point);
+      fov_points.emplace_back(point);
     } else {
-      non_fov_points.push_back(point);
+      non_fov_points.emplace_back(point);
     }
   }
 
@@ -190,14 +196,16 @@ SensorProcessor::euclideanClustering(const std::vector<Eigen::Vector2d> &points,
 
     // 开始新簇
     std::vector<Eigen::Vector2d> cluster;
-    std::vector<size_t> seeds = {i};
+    cluster.reserve(points.size());  // 预分配
+    std::vector<size_t> seeds;
+    seeds.reserve(points.size() / 10);  // 预分配
 
     visited[i] = true;
 
     while (!seeds.empty()) {
       size_t seed_idx = seeds.back();
       seeds.pop_back();
-      cluster.push_back(points[seed_idx]);
+      cluster.emplace_back(points[seed_idx]);
 
       // 查找邻域点
       for (size_t j = 0; j < points.size(); ++j) {
@@ -207,14 +215,14 @@ SensorProcessor::euclideanClustering(const std::vector<Eigen::Vector2d> &points,
         double distance = (points[j] - points[seed_idx]).norm();
         if (distance <= distance_threshold) {
           visited[j] = true;
-          seeds.push_back(j);
+          seeds.emplace_back(j);
         }
       }
     }
 
     // 只保留满足最小点数的簇
     if (static_cast<int>(cluster.size()) >= min_points) {
-      clusters.push_back(cluster);
+      clusters.emplace_back(std::move(cluster));
     }
   }
 
@@ -226,6 +234,7 @@ ObstContainer SensorProcessor::clustersToObstacles(
     const std::vector<std::vector<Eigen::Vector2d>> &clusters) {
 
   ObstContainer obstacles;
+  obstacles.reserve(clusters.size());
 
   for (const auto &cluster : clusters) {
     if (cluster.empty())
@@ -249,7 +258,7 @@ ObstContainer SensorProcessor::clustersToObstacles(
     ObstaclePtr obstacle(
         new CircularObstacle(centroid.x(), centroid.y(), max_distance));
 
-    obstacles.push_back(obstacle);
+    obstacles.emplace_back(std::move(obstacle));
   }
 
   return obstacles;
@@ -369,10 +378,9 @@ void SensorProcessor::laserCallback(const LaserScanData &scan_data,
   }
 }
 
-// 获取当前所有障碍物（用于规划）
+// 获取当前所有障碍物（Base坐标系）
 ObstContainer
-SensorProcessor::getObstaclesForPlanning(const PoseData &current_pose) {
-
+SensorProcessor::getBaseObstacles(const PoseData &current_pose) {
   ObstContainer all_obstacles;
 
   // FOV内障碍物（已在基座坐标系）
@@ -385,10 +393,27 @@ SensorProcessor::getObstaclesForPlanning(const PoseData &current_pose) {
       transformObstaclesToBase(memory_obs_world, current_pose);
   all_obstacles.insert(all_obstacles.end(), memory_obs_base.begin(),
                        memory_obs_base.end());
-
+                      
   return all_obstacles;
 }
 
+// 获取当前所有障碍物（map坐标系）
+ObstContainer
+SensorProcessor::getMapObstacles(const PoseData &current_pose) {
+  ObstContainer all_obstacles;
+
+  // 获取FOV内障碍物（Base坐标系）
+  auto fov_obs = memory_.getFOVObstacles();
+  // 将FOV内障碍物转换到map坐标系并添加
+  auto fov_obs_map = transformObstaclesToWorld(fov_obs, current_pose);
+  all_obstacles.insert(all_obstacles.end(), fov_obs_map.begin(), fov_obs_map.end());
+
+  // 添加FOV外记忆障碍物（map坐标系，已经是map下的全局记忆障碍物）
+  auto memory_obs_world = memory_.getMemoryObstacles();
+  all_obstacles.insert(all_obstacles.end(), memory_obs_world.begin(), memory_obs_world.end());
+
+  return all_obstacles;
+}
 // 获取当前所有障碍物的点云（map坐标系，用于可视化）
 std::vector<Eigen::Vector2d>
 SensorProcessor::getObstaclesPointsForPlanning(const PoseData &current_pose) {
@@ -414,6 +439,7 @@ SensorProcessor::transformObstaclesToWorld(const ObstContainer &obstacles_base,
                                            const PoseData &current_pose) {
 
   ObstContainer obstacles_world;
+  obstacles_world.reserve(obstacles_base.size());
 
   double robot_x = current_pose.position.x;
   double robot_y = current_pose.position.y;
@@ -434,7 +460,7 @@ SensorProcessor::transformObstaclesToWorld(const ObstContainer &obstacles_base,
 
       ObstaclePtr new_obs(new CircularObstacle(
           centroid_world.x(), centroid_world.y(), circular_obs->radius()));
-      obstacles_world.push_back(new_obs);
+      obstacles_world.emplace_back(std::move(new_obs));
     } else if (auto point_obs =
                    boost::dynamic_pointer_cast<PointObstacle>(obs)) {
       // 变换点障碍物
@@ -443,7 +469,7 @@ SensorProcessor::transformObstaclesToWorld(const ObstContainer &obstacles_base,
       Eigen::Vector2d pos_world = rotation * pos_base + translation;
 
       ObstaclePtr new_obs(new PointObstacle(pos_world.x(), pos_world.y()));
-      obstacles_world.push_back(new_obs);
+      obstacles_world.emplace_back(std::move(new_obs));
     }
     // 其他类型的障碍物可以类似处理
   }
@@ -457,6 +483,7 @@ SensorProcessor::transformObstaclesToBase(const ObstContainer &obstacles_world,
                                           const PoseData &current_pose) {
 
   ObstContainer obstacles_base;
+  obstacles_base.reserve(obstacles_world.size());
 
   double robot_x = current_pose.position.x;
   double robot_y = current_pose.position.y;
@@ -477,7 +504,7 @@ SensorProcessor::transformObstaclesToBase(const ObstContainer &obstacles_world,
 
       ObstaclePtr new_obs(new CircularObstacle(
           centroid_base.x(), centroid_base.y(), circular_obs->radius()));
-      obstacles_base.push_back(new_obs);
+      obstacles_base.emplace_back(std::move(new_obs));
     } else if (auto point_obs =
                    boost::dynamic_pointer_cast<PointObstacle>(obs)) {
       // 变换点障碍物
@@ -486,7 +513,7 @@ SensorProcessor::transformObstaclesToBase(const ObstContainer &obstacles_world,
       Eigen::Vector2d pos_base = rotation * (pos_world + translation);
 
       ObstaclePtr new_obs(new PointObstacle(pos_base.x(), pos_base.y()));
-      obstacles_base.push_back(new_obs);
+      obstacles_base.emplace_back(std::move(new_obs));
     }
     // 其他类型的障碍物可以类似处理
   }

@@ -83,10 +83,12 @@ PlannerConfig loadConfig(const std::string &config_file) {
           opt_node["weight_acc_lim_theta"].as<double>(1);
       config.teb_config.optim.weight_kinematics_nh =
           opt_node["weight_kinematics_nh"].as<double>(1000);
+      config.teb_config.optim.weight_kinematics_forward_drive =
+          opt_node["weight_kinematics_forward_drive"].as<double>(1000); // 防止后退
       config.teb_config.optim.weight_obstacle =
           opt_node["weight_obstacle"].as<double>(50);
-      config.teb_config.optim.weight_frenet_corridor =
-          opt_node["weight_frenet_corridor"].as<double>(10000);
+      config.teb_config.optim.weight_viapoint =
+          opt_node["weight_viapoint"].as<double>(500);
     }
 
     // Load obstacles configuration

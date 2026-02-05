@@ -346,7 +346,7 @@ int main() {
   auto visual = TebVisualizationPtr(new TebVisualization(config.teb_config));
   auto planner = new TebOptimalPlanner(config.teb_config, &obst_vector,
                                        robot_model, visual, nullptr);
-  planner->setFrenetReference(frenet_ref);
+  // planner->setFrenetReference(frenet_ref);
   
   // 设置正方形视野大小（从配置读取或使用默认值）
   double square_vision_size = 5.0; // 默认5米

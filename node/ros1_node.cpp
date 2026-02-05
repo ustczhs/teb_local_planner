@@ -268,8 +268,8 @@ private:
         p2.x = end_map.x();
         p2.y = end_map.y();
         p2.z = 0.0;
-        marker.points.push_back(p1);
-        marker.points.push_back(p2);
+        marker.points.emplace_back(std::move(p1));
+        marker.points.emplace_back(std::move(p2));
       } else if (auto* poly_obst = dynamic_cast<PolygonObstacle*>(obst.get())) {
         marker.type = visualization_msgs::Marker::LINE_STRIP;
         marker.pose.orientation.w = 1.0;
@@ -280,7 +280,7 @@ private:
           p.x = vertex_map.x();
           p.y = vertex_map.y();
           p.z = 0.0;
-          marker.points.push_back(p);
+          marker.points.emplace_back(std::move(p));
         }
         // 闭合多边形
         if (!poly_obst->vertices().empty()) {
@@ -289,11 +289,11 @@ private:
           p.x = vertex_map.x();
           p.y = vertex_map.y();
           p.z = 0.0;
-          marker.points.push_back(p);
+          marker.points.emplace_back(std::move(p));
         }
       }
 
-      marker_array.markers.push_back(marker);
+      marker_array.markers.emplace_back(std::move(marker));
     }
     obstacle_pub_.publish(marker_array);
 
@@ -330,6 +330,9 @@ private:
       nav_msgs::Path path_msg;
       path_msg.header.stamp = ros::Time::now();
       path_msg.header.frame_id = "map";
+      // 预分配容量
+      path_msg.poses.reserve(trajectory.size());
+      
       for (const auto &point : trajectory) {
         geometry_msgs::PoseStamped pose;
         pose.header = path_msg.header;
@@ -342,7 +345,7 @@ private:
         pose.pose.orientation.y = q.y();
         pose.pose.orientation.z = q.z();
         pose.pose.orientation.w = q.w();
-        path_msg.poses.push_back(pose);
+        path_msg.poses.emplace_back(std::move(pose));
       }
       path_pub_.publish(path_msg);
       ROS_DEBUG("Published local plan with %zu poses", path_msg.poses.size());
@@ -425,9 +428,9 @@ private:
     z_field.datatype = sensor_msgs::PointField::FLOAT32;
     z_field.count = 1;
 
-    cloud_msg.fields.push_back(x_field);
-    cloud_msg.fields.push_back(y_field);
-    cloud_msg.fields.push_back(z_field);
+    cloud_msg.fields.emplace_back(std::move(x_field));
+    cloud_msg.fields.emplace_back(std::move(y_field));
+    cloud_msg.fields.emplace_back(std::move(z_field));
     cloud_msg.point_step = 12; // x(4) + y(4) + z(4)
     cloud_msg.row_step = cloud_msg.point_step * cloud_msg.width;
 
@@ -454,7 +457,7 @@ private:
     std::vector<std::vector<Eigen::Vector2d>> clusters;
     // 替换为你的聚类逻辑
     if (!points.empty()) {
-      clusters.push_back(points);
+      clusters.emplace_back(points);
     }
     return clusters;
   }

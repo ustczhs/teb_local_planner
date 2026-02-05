@@ -81,8 +81,11 @@ public:
   void laserCallback(const LaserScanData &scan_data,
                      const PoseData &current_pose);
 
-  // 获取当前所有障碍物（用于规划）
-  ObstContainer getObstaclesForPlanning(const PoseData &current_pose);
+  // 获取当前所有障碍物（Base坐标系）
+  ObstContainer getBaseObstacles(const PoseData &current_pose);
+
+  // 获取当前所有障碍物（map坐标系）
+  ObstContainer getMapObstacles(const PoseData &current_pose);
 
   // 获取当前所有障碍物的点云（map坐标系，用于可视化）
   std::vector<Eigen::Vector2d> getObstaclesPointsForPlanning(const PoseData &current_pose);
